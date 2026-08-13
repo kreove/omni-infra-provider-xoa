@@ -36,6 +36,9 @@ omnictl cluster template sync -f cluster.yaml --verbose
 omnictl cluster template status -f cluster.yaml
 ```
 
+> [!NOTE]
+> Omni cluster templates that use `machineClass` — which is how this provider is consumed — **do not support `kernelArgs`**. Setting `kernelArgs` at either cluster or machine-set level causes a validation error. This does not affect the serial-console argument the provider itself appends (`console=ttyS0,38400n8`), which is applied provider-side when generating the Image Factory schematic, not through the template.
+
 Official cluster-template reference:
 
 - <https://docs.siderolabs.com/omni/reference/cluster-templates>

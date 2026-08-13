@@ -60,7 +60,7 @@ Live testing also found and fixed three real gaps between what the Go SDK assume
 - **`CreateVm` requires an explicit target `PowerState`.** It always waits for a target power state after creation and treats an unset (empty-string) `PowerState` as invalid, rather than "don't wait." Fixed by explicitly requesting `HaltedPowerState` (the provider powers the VM on itself in a later `syncMachine` retry, same as before).
 - **The SDK's `DeleteVIF` unconditionally disconnects before deleting**, but XO rejects disconnecting a VIF that's already unattached — which every VIF on a halted VM is. Since `Deprovision` only reaches VIF cleanup after confirming the VM is halted, this failed on every deprovision. Fixed by calling `vif.delete` directly, skipping the disconnect.
 
-One further live finding changed the deprovisioning approach rather than fixing a bug in this codebase: the SDK's `HaltVm` (used for the standard "power off" step) refuses to even attempt a stop RPC until XO reports PV drivers detected in the guest, with no fallback ([known upstream issue](https://github.com/terra-farm/terraform-provider-xenorchestra/issues/220)). A machine being deprovisioned may never have booted successfully — bad join config, a crashed Talos install, a missing `xen-guest-agent` extension — so deprovisioning can't depend on PV drivers being present. `Deprovision` therefore calls `vm.stop` with `force: true` directly instead of going through `HaltVm`.
+One further live finding changed the deprovisioning approach rather than fixing a bug in this codebase: the SDK's `HaltVm` (used for the standard "power off" step) refuses to even attempt a stop RPC until XO reports PV drivers detected in the guest, with no fallback ([known upstream issue](https://github.com/vatesfr/terraform-provider-xenorchestra/issues/220)). A machine being deprovisioned may never have booted successfully — bad join config, a crashed Talos install, a missing `xen-guest-agent` extension — so deprovisioning can't depend on PV drivers being present. `Deprovision` therefore calls `vm.stop` with `force: true` directly instead of going through `HaltVm`.
 
 ## Image import readiness
 
@@ -104,7 +104,7 @@ The provider uses APIs from the Omni client version declared in `go.mod`. A new 
 
 Validated live against one current XCP-ng pool managed by Xen Orchestra. No formal minimum Xen Orchestra or XCP-ng release is declared beyond that. The target environment must support the API operations used by `xenorchestra-go-sdk v1.18.0` and by the raw JSON-RPC calls noted above, including:
 
-- Username/password authentication (token auth is supported by the provider but wasn't exercised in live testing — the validated environment didn't have a way to generate an API token in its XO UI)
+- Username/password **or** API token authentication — both exercised against a live instance. (Tokens are not created from a Settings page in the XO UI; see [Installation](installation.md#getting-a-token).)
 - VM create/read/delete and power operations, including `vm.stop` with `force: true`
 - VDI upload (REST VDI import) and lifecycle operations
 - VIF lifecycle operations, including `vif.delete` without a prior disconnect

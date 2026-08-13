@@ -90,19 +90,32 @@ Username and password authentication is fully supported and is a perfectly reaso
 
 ### Required permissions
 
-The provider performs the following operations:
+> [!NOTE]
+> Live validation of this provider was performed with an **admin** account. A reduced-privilege account is expected to work based on the analysis below, but has not been tested — treat it as something to verify in your own environment rather than a supported configuration.
 
-| Resource | Required operations |
+Xen Orchestra does not expose per-verb permission toggles. Its model is:
+
+- a global `permission` on the user (`none`, `read`, `write`, `admin`), and
+- ACLs granting a **role** (viewer / operator / admin) on **specific objects** (pools, SRs, networks, VMs).
+
+Inspecting the API on a live instance, none of the JSON-RPC methods this provider calls are gated to `admin` at the method level — they all defer to object-level ACLs. (For contrast, some methods *are* method-level admin-only, such as `token.delete`.) So in principle an account with operator-or-higher ACLs on the target pool, SR, and network should be sufficient.
+
+The provider invokes these methods, which is the concrete list to grant access for:
+
+| Area | Methods |
 | --- | --- |
-| Pools | list/read |
-| Networks | list/read |
-| Storage repositories | list/read |
-| VDIs | list/read/create/delete, raw upload |
-| Virtual machines | list/read/create/modify/delete and power operations |
-| VIFs | list/read/create/delete |
-| Templates | list/read, convert-to-template |
+| Discovery | `xo.getAllObjects` |
+| VM lifecycle | `vm.create`, `vm.set`, `vm.start`, `vm.stop`, `vm.delete` |
+| Image pipeline | `vm.attachDisk`, `vm.convertToTemplate`, VDI upload over the REST API |
+| Networking | `vm.createInterface`, `vif.disconnect`, `vif.delete` |
+| Storage | `disk.create`, `vdi.set`, `vdi.delete`, `vbd.disconnect` |
 
-Permission names and scopes can differ between Xen Orchestra releases and depend on the ACL/RBAC model in use. Start with permissions scoped to the target pool, SR, and network, then reduce them after validating all lifecycle operations.
+Two caveats before you try to run this unprivileged:
+
+- The Talos image upload goes through the **REST API**, not JSON-RPC. Older Xen Orchestra releases restricted REST API access to admin users; per-role REST access arrived with the ACL/RBAC work in XO 6.4. If uploads fail for a non-admin account while JSON-RPC calls succeed, this is the likely cause.
+- `vm.convertToTemplate` creates a pool-level template object, which is not scoped to the SR or network you granted.
+
+If you do run the provider as admin, still give it a **dedicated** account rather than a person's login, so its actions are attributable and its credentials can be rotated independently.
 
 Official Xen Orchestra references:
 

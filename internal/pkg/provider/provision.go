@@ -269,7 +269,7 @@ func (p *Provisioner) Deprovision(
 	if vm.PowerState == xoaclient.RunningPowerState {
 		// The SDK's HaltVm refuses to even attempt a stop until XO reports PV
 		// drivers detected in the guest, with no fallback (see
-		// https://github.com/terra-farm/terraform-provider-xenorchestra/issues/220).
+		// https://github.com/vatesfr/terraform-provider-xenorchestra/issues/220).
 		// A machine being deprovisioned may never have booted successfully
 		// (bad join config, crashed Talos, missing guest-agent extension), so
 		// deprovisioning can't depend on that. Force-stop directly instead.
