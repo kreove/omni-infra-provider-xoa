@@ -58,9 +58,37 @@ Official Omni reference:
 - <https://docs.siderolabs.com/omni/infrastructure-and-extensions/infrastructure-providers>
 - <https://docs.siderolabs.com/omni/reference/cli>
 
-## 2. Create a Xen Orchestra service account and API token
+## 2. Create a Xen Orchestra account for the provider
 
-Create a dedicated Xen Orchestra user for the provider rather than using an administrator's personal account. Generate an API token for that user (**Settings → API tokens** in the Xen Orchestra UI, or `xo-cli create-token`) and store it securely.
+Create a dedicated Xen Orchestra user for the provider rather than using an administrator's personal account.
+
+The provider can authenticate either with an API token (preferred) or with that user's username and password. Set **one** of these in `deploy/.env`:
+
+```dotenv
+XOA_TOKEN=...
+# or
+XOA_USERNAME=...
+XOA_PASSWORD=...
+```
+
+If a token is set, the username and password are ignored.
+
+### Getting a token
+
+There is no "API tokens" page under **Settings** in the Xen Orchestra UI. Token creation lives on your **own user page**, and the exact location moves between XO 5 and XO 6, so the reliable, version-independent way is the CLI:
+
+```bash
+# Same arguments as `xo-cli register`; prints the token to stdout.
+xo-cli create-token https://xoa.example.com provider-user
+```
+
+Run this while logged in **as the provider's user**, not as your admin account — the token inherits the permissions of whoever created it.
+
+In the XO 5 web UI, the equivalent lives in your user space rather than in Settings: click your username at the bottom of the left sidebar to open the **User** page, then look for the authentication-tokens section. If you cannot find it in your version, use `xo-cli create-token` or the REST endpoint `POST /rest/v0/users/me/authentication_tokens` instead.
+
+Username and password authentication is fully supported and is a perfectly reasonable fallback if tokens are awkward in your version — it is what the provider's live validation was performed with. The trade-off is that the credentials are longer-lived and higher-value than a scoped token, so restrict the account's permissions accordingly and rotate it if it leaks.
+
+### Required permissions
 
 The provider performs the following operations:
 

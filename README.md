@@ -64,9 +64,17 @@ You can also create the provider from **Settings → Infra Providers** in the Om
 
 See [Installation](docs/installation.md#1-register-an-infrastructure-provider-in-omni) for details, including how to create the underlying `infra-provider:xoa` service account explicitly.
 
-### 2. Create a Xen Orchestra API token
+### 2. Create a Xen Orchestra account for the provider
 
-Create a dedicated Xen Orchestra user, grant only the permissions required by the provider, and create an API token for that user. See [Installation](docs/installation.md#2-create-a-xen-orchestra-service-account-and-api-token) for details.
+Create a dedicated Xen Orchestra user and grant only the permissions the provider needs. Authenticate as that user with either an API token or a username and password.
+
+Token creation is **not** under Settings in the XO UI — it lives on your own user page, and moves between XO versions. The version-independent way is the CLI, run as the provider's user:
+
+```bash
+xo-cli create-token https://xoa.example.com provider-user
+```
+
+See [Installation](docs/installation.md#2-create-a-xen-orchestra-account-for-the-provider) for the permission list and the username/password alternative.
 
 ### 3. Configure the provider
 
