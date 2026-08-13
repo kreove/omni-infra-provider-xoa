@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: omni-infra-provider-xoa
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: provider-credentials
+  namespace: omni-infra-provider-xoa
+type: Opaque
+stringData:
+  OMNI_ENDPOINT: https://omni.example.com
+  OMNI_SERVICE_ACCOUNT_KEY: replace-me
+  XOA_ENDPOINT: wss://xoa.example.com
+  XOA_TOKEN: replace-me
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni-infra-provider-xoa
+  namespace: omni-infra-provider-xoa
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: omni-infra-provider-xoa
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: omni-infra-provider-xoa
+    spec:
+      containers:
+        - name: provider
+          image: ghcr.io/kreove/omni-infra-provider-xoa:VERSION
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TALOS_IMAGE_FACTORY_BASE_URL
+              value: https://factory.talos.dev
+          envFrom:
+            - secretRef:
+                name: provider-credentials
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+      terminationGracePeriodSeconds: 30

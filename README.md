@@ -1,0 +1,204 @@
+# Omni Infrastructure Provider for Xen Orchestra
+
+A community infrastructure provider that lets [Sidero Omni](https://docs.siderolabs.com/omni/) create, scale, and delete [Talos Linux](https://www.talos.dev/) virtual machines on XCP-ng through [Xen Orchestra](https://xen-orchestra.com/).
+
+> [!IMPORTANT]
+> This project is community maintained and is not an official Sidero Labs or Vates product. It is currently an **alpha release**, ported from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos). The full lifecycle (golden-template build, VM clone, VIF/cloud-init, power on, deprovision) has been validated end-to-end against a live XCP-ng pool managed by Xen Orchestra — see [Compatibility and limitations](docs/compatibility.md) for what that covered and the known gaps that remain. Test it in your own non-production environment before relying on it for critical clusters.
+
+## Features
+
+- Dynamic VM provisioning from Omni Machine Requests
+- Clean scale-up, scale-down, and deprovisioning
+- Automatic Talos Image Factory downloads, decompressed and imported into Xen Orchestra by the provider
+- Image caching by Talos version, architecture, and Omni schematic, reused as a clonable golden template
+- Omni-controlled system extensions and Talos versions
+- Optional use of an existing Xen Orchestra template (manual override)
+- NoCloud cloud-init join config delivery via Xen Orchestra's `cloudConfig`/`networkConfig`
+- Docker Compose and Kubernetes deployment examples
+- API-token or username/password authentication to Xen Orchestra
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Omni Machine Request] --> B[Xen Orchestra provider]
+    B --> C{Cached golden template?}
+    C -- No --> D[Provider downloads+decompresses Image Factory raw image, uploads it into XO, converts it to a template]
+    C -- Yes --> E[Clone template into new VM]
+    D --> E
+    E --> F[Attach VIF on selected network]
+    F --> G[Inject Omni join config via cloudConfig/networkConfig]
+    G --> H[Boot Talos VM]
+    H --> I[Machine connects to Omni]
+```
+
+Omni selects the Talos version and resolves the applicable system extensions into an Image Factory schematic. The provider converts that schematic into a `nocloud-amd64.raw.xz` URL, downloads and decompresses it itself (Xen Orchestra has no server-side URL-import equivalent to VergeOS's), uploads the raw disk into the configured Storage Repository, and turns it into a clonable template. Each machine is then created by fast-cloning that template's disk.
+
+When Omni no longer needs a machine, the provider powers it off and removes its VIFs, disks, and VM. Shared cached golden templates are retained for reuse.
+
+## Requirements
+
+- An Omni instance with administrator access
+- A Xen Orchestra instance managing an XCP-ng pool, reachable from the provider container
+- Docker or Kubernetes to run the provider
+- A dedicated Xen Orchestra API token (or username/password)
+- DNS and HTTPS access from the provider container to the configured Talos Image Factory
+- Network access from provisioned Talos VMs to the Omni endpoints required by your deployment
+- `amd64` virtualization hosts (XCP-ng is x86-only)
+
+The provider currently supports `amd64` only.
+
+## Quick start
+
+### 1. Register the provider in Omni
+
+The service-account name must match the provider ID. The default provider ID is `xoa`.
+
+```bash
+omnictl infraprovider create xoa
+```
+
+Save the returned `OMNI_ENDPOINT` and `OMNI_SERVICE_ACCOUNT_KEY` values.
+
+You can also create the provider from **Settings → Infra Providers** in the Omni UI.
+
+### 2. Create a Xen Orchestra API token
+
+Create a dedicated Xen Orchestra user, grant only the permissions required by the provider, and create an API token for that user. See [Installation](docs/installation.md#2-create-a-xen-orchestra-service-account-and-api-token) for details.
+
+### 3. Configure the provider
+
+```bash
+cp deploy/example.env deploy/.env
+chmod 600 deploy/.env
+```
+
+Edit `deploy/.env`:
+
+```dotenv
+PROVIDER_IMAGE=ghcr.io/kreove/omni-infra-provider-xoa:VERSION
+OMNI_ENDPOINT=https://omni.example.com
+OMNI_SERVICE_ACCOUNT_KEY=replace-me
+XOA_ENDPOINT=wss://xoa.example.com
+XOA_TOKEN=replace-me
+TALOS_IMAGE_FACTORY_BASE_URL=https://factory.talos.dev
+```
+
+### 4. Start the provider
+
+```bash
+cd deploy
+docker compose up -d
+docker compose logs -f omni-infra-provider-xoa
+```
+
+The provider exposes no listening port. It only makes outbound connections to Omni, Xen Orchestra, and the Talos Image Factory.
+
+### 5. Create a Xen-Orchestra-backed Machine Class
+
+In Omni, create a dynamic Machine Class using the registered Xen Orchestra provider. Paste provider data similar to:
+
+```yaml
+pool_id: "<xo-pool-uuid>"
+sr_id: "<xo-sr-uuid>"
+network_id: "<xo-network-uuid>"
+architecture: amd64
+cores: 4
+memory: 8192
+disk_size: 32
+```
+
+Do not set `template_id` when you want automatic Image Factory integration.
+
+### 6. Create a cluster
+
+Reference the Machine Class from the Omni UI or a cluster template:
+
+```yaml
+kind: Cluster
+name: xoa-example
+kubernetes:
+  version: v1.36.1
+talos:
+  version: v1.13.2
+systemExtensions:
+  - siderolabs/xen-guest-agent
+---
+kind: ControlPlane
+machineClass:
+  name: xoa-control-plane
+  size: 3
+---
+kind: Workers
+name: workers
+machineClass:
+  name: xoa-workers
+  size: 3
+```
+
+Validate and apply it:
+
+```bash
+omnictl cluster template validate -f cluster.yaml
+omnictl cluster template sync -f cluster.yaml --verbose
+omnictl cluster template status -f cluster.yaml
+```
+
+Use Talos and Kubernetes versions supported by your Omni release. The versions above are examples, not release requirements. Installing the `siderolabs/xen-guest-agent` system extension is recommended so Xen Orchestra reports the VM's IP addresses; see [Images and system extensions](docs/images-and-extensions.md).
+
+## System extensions and image selection
+
+You normally do **not** select a fixed installation template in Xen Orchestra. Configure `systemExtensions` in Omni instead. Omni generates a new schematic whenever the Talos version, extensions, or image-affecting configuration changes. The provider then imports or reuses the golden template required by that schematic.
+
+See [Images and system extensions](docs/images-and-extensions.md).
+
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Configuration reference](docs/configuration.md)
+- [Using the provider](docs/usage.md)
+- [Images and system extensions](docs/images-and-extensions.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Architecture and lifecycle](docs/architecture.md)
+- [Compatibility and limitations](docs/compatibility.md)
+- [Development and releases](docs/development.md)
+- [Support](SUPPORT.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Building from source
+
+```bash
+docker build --pull --no-cache \
+  -t omni-infra-provider-xoa:local \
+  .
+```
+
+Or use Go directly:
+
+```bash
+go mod tidy
+go test ./...
+go build -o _out/omni-infra-provider-xoa \
+  ./cmd/omni-infra-provider-xoa
+```
+
+The required Go version is declared in `go.mod`.
+
+## Release status
+
+Ported from `omni-infra-provider-vergeos` and validated end-to-end against a live XCP-ng pool managed by Xen Orchestra:
+
+- Golden-template build (download, decompress, upload, attach, convert-to-template) from a real Talos Image Factory image
+- Template-cache reuse on a subsequent request
+- VM creation by fast-cloning the template, with the boot disk resized correctly and a VIF attached to the requested network
+- Cloud-init delivery via `cloudConfig`/`networkConfig`
+- Power on and full deprovisioning (VIFs, disks, VM all removed)
+
+That validation pass also found and fixed several real gaps between the Go SDK's assumptions and what XO's JSON-RPC API actually expects — see [Compatibility and limitations](docs/compatibility.md#findings-from-live-validation) for the details. It has not yet been exercised through an actual Omni-driven cluster (Machine Requests via `omnictl`/cluster templates, scale-up/down, multiple concurrent machines) — see [Development and releases](docs/development.md#live-test-checklist) for what's still open.
+
+## License
+
+This project is licensed under the [Mozilla Public License 2.0](LICENSE).
+
+The provider follows patterns from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos), which itself follows patterns from the Sidero Labs KubeVirt infrastructure provider, and uses the official [Xen Orchestra Go SDK](https://github.com/vatesfr/xenorchestra-go-sdk). See [NOTICE.md](NOTICE.md) for attribution.

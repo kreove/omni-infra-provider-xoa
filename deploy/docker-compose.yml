@@ -1,0 +1,17 @@
+services:
+  omni-infra-provider-xoa:
+    image: ${PROVIDER_IMAGE:?PROVIDER_IMAGE is not set}
+    container_name: omni-infra-provider-xoa
+    restart: unless-stopped
+
+    environment:
+      OMNI_ENDPOINT: ${OMNI_ENDPOINT:?OMNI_ENDPOINT is not set}
+      OMNI_SERVICE_ACCOUNT_KEY: ${OMNI_SERVICE_ACCOUNT_KEY:?OMNI_SERVICE_ACCOUNT_KEY is not set}
+      XOA_ENDPOINT: ${XOA_ENDPOINT:?XOA_ENDPOINT is not set}
+      XOA_TOKEN: ${XOA_TOKEN:?XOA_TOKEN is not set}
+      TALOS_IMAGE_FACTORY_BASE_URL: ${TALOS_IMAGE_FACTORY_BASE_URL:-https://factory.talos.dev}
+
+    # For a temporary test with an untrusted Xen Orchestra or Omni certificate, add:
+    # command:
+    #   - --xoa-insecure-skip-verify
+    #   - --insecure-skip-verify

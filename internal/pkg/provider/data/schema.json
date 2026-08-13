@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "pool_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Xen Orchestra pool UUID where VMs are created"
+    },
+    "sr_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Xen Orchestra Storage Repository UUID used for cached images and VM disks"
+    },
+    "network_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Xen Orchestra network UUID attached to the VM's primary VIF"
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Optional existing Xen Orchestra template UUID. Leave unset to import and cache the required Talos image automatically from Talos Image Factory.",
+      "default": ""
+    },
+    "cores": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 4
+    },
+    "memory": {
+      "type": "integer",
+      "minimum": 2048,
+      "default": 8192,
+      "description": "RAM in MiB"
+    },
+    "architecture": {
+      "enum": [
+        "amd64"
+      ],
+      "default": "amd64"
+    },
+    "disk_size": {
+      "type": "integer",
+      "minimum": 5,
+      "default": 32,
+      "description": "Boot disk size in GiB"
+    }
+  },
+  "required": [
+    "pool_id",
+    "sr_id",
+    "network_id",
+    "cores",
+    "memory",
+    "architecture",
+    "disk_size"
+  ]
+}
