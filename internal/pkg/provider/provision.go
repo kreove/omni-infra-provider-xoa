@@ -8,6 +8,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -20,7 +21,13 @@ import (
 	"github.com/kreove/omni-infra-provider-xoa/internal/pkg/provider/resources"
 )
 
-const bootDiskName = "disk0"
+const (
+	bootDiskName = "disk0"
+
+	// configDriveName identifies the NoCloud drive this provider builds and
+	// attaches itself, so it can be recognized on reconcile.
+	configDriveName = "cidata"
+)
 
 // Provisioner provisions Talos VMs on XCP-ng through Xen Orchestra.
 type Provisioner struct {
@@ -136,7 +143,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			if vm == nil {
 				createdVM, createErr := p.createVM(
 					pctx.GetRequestID(),
-					pctx.ConnectionParams.JoinConfig,
 					providerData,
 					pctx.State.TypedSpec().Value.TemplateId,
 				)
@@ -157,6 +163,23 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			if pctx.State.TypedSpec().Value.Uuid == "" {
 				pctx.State.TypedSpec().Value.Uuid = vm.Id
+			}
+
+			// Must happen before the first power-on: Talos reads the config
+			// drive during early boot and drops to maintenance mode if it is
+			// not there.
+			attached, err := p.ensureConfigDrive(vm, pctx.ConnectionParams.JoinConfig, providerData)
+			if err != nil {
+				return err
+			}
+
+			if attached {
+				logger.Info(
+					"attached NoCloud config drive",
+					zap.String("name", vm.NameLabel),
+				)
+
+				return provision.NewRetryInterval(5 * time.Second)
 			}
 
 			if vm.PowerState != xoaclient.RunningPowerState {
@@ -180,7 +203,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 func (p *Provisioner) createVM(
 	name string,
-	joinConfig string,
 	providerData data.Data,
 	templateID string,
 ) (*xoaclient.Vm, error) {
@@ -233,9 +255,11 @@ func (p *Provisioner) createVM(
 		VIFsMap: []map[string]string{
 			{"network": providerData.NetworkID},
 		},
-		CloudConfig:        joinConfig,
-		CloudNetworkConfig: "version: 1\n",
-		Tags:               []string{managedTag},
+		// CloudConfig/CloudNetworkConfig are deliberately not set. Passing them
+		// makes Xen Orchestra build its own config drive, whose MBR-wrapped
+		// layout Talos cannot detect (see cidata.go). ensureConfigDrive
+		// attaches a drive Talos can actually read instead.
+		Tags: []string{managedTag},
 		// The SDK always sends xenStoreData in a follow-up vm.set call; a nil
 		// Go map marshals to JSON null, which newer XO versions reject with
 		// "must be object". An explicit empty map marshals to {} instead.
@@ -251,6 +275,73 @@ func (p *Provisioner) createVM(
 	}
 
 	return vm, nil
+}
+
+// ensureConfigDrive attaches a NoCloud config drive carrying the Omni join
+// config, building and uploading it if the VM does not have one yet. It
+// reports whether a drive was attached on this call, so the caller can let the
+// change settle before powering the machine on.
+func (p *Provisioner) ensureConfigDrive(
+	vm *xoaclient.Vm,
+	joinConfig string,
+	providerData data.Data,
+) (bool, error) {
+	disks, err := p.client.GetDisks(vm)
+	if err != nil {
+		return false, fmt.Errorf("failed to list disks on VM %q: %w", vm.NameLabel, err)
+	}
+
+	for _, disk := range disks {
+		if disk.NameLabel == configDriveName {
+			return false, nil
+		}
+	}
+
+	if joinConfig == "" {
+		return false, fmt.Errorf("Omni supplied an empty join config for VM %q", vm.NameLabel)
+	}
+
+	image, err := buildCidataImage(joinConfig, noCloudMetaData(vm.NameLabel), "version: 1\n")
+	if err != nil {
+		return false, fmt.Errorf("failed to build config drive for VM %q: %w", vm.NameLabel, err)
+	}
+
+	// CreateVDI uploads from a file, so the image has to be staged on disk.
+	tmp, err := os.CreateTemp("", "omni-cidata-*.img")
+	if err != nil {
+		return false, fmt.Errorf("failed to stage config drive: %w", err)
+	}
+
+	defer os.Remove(tmp.Name())
+
+	if _, err = tmp.Write(image); err != nil {
+		tmp.Close()
+
+		return false, fmt.Errorf("failed to write config drive image: %w", err)
+	}
+
+	if err = tmp.Close(); err != nil {
+		return false, fmt.Errorf("failed to finalize config drive image: %w", err)
+	}
+
+	vdi, err := p.client.CreateVDI(xoaclient.CreateVDIReq{
+		SRId:      providerData.SRID,
+		Filepath:  tmp.Name(),
+		NameLabel: configDriveName,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to upload config drive for VM %q: %w", vm.NameLabel, err)
+	}
+
+	var ok bool
+	if err = p.client.Call("vm.attachDisk", map[string]interface{}{
+		"vm":  vm.Id,
+		"vdi": vdi.VDIId,
+	}, &ok); err != nil {
+		return false, fmt.Errorf("failed to attach config drive to VM %q: %w", vm.NameLabel, err)
+	}
+
+	return true, nil
 }
 
 func (p *Provisioner) findVM(name string) (*xoaclient.Vm, error) {

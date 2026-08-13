@@ -107,14 +107,39 @@ func TestLiveXOProvisioning(t *testing.T) {
 	}
 
 	vmName := fmt.Sprintf("omni-xoa-live-test-%d", time.Now().Unix())
-	joinConfig := "#cloud-config\n# live test placeholder join config, not a real Omni join token\n"
 
-	vm, err := p.createVM(vmName, joinConfig, providerData, templateID)
+	vm, err := p.createVM(vmName, providerData, templateID)
 	if err != nil {
 		t.Fatalf("createVM failed: %v", err)
 	}
 
 	t.Logf("created VM %s (id=%s)", vm.NameLabel, vm.Id)
+
+	// The config drive carries the join config and must exist before boot.
+	// A placeholder is fine here: this asserts the drive is built, uploaded and
+	// attached, not that the machine joins Omni.
+	joinConfig := "#cloud-config\n# live test placeholder, not a real Omni join token\n"
+
+	attached, err := p.ensureConfigDrive(vm, joinConfig, providerData)
+	if err != nil {
+		t.Fatalf("ensureConfigDrive failed: %v", err)
+	}
+
+	if !attached {
+		t.Fatal("expected a config drive to be attached to a freshly created VM")
+	}
+
+	// Second call must be a no-op, or every reconcile would pile on new drives.
+	attachedAgain, err := p.ensureConfigDrive(vm, joinConfig, providerData)
+	if err != nil {
+		t.Fatalf("ensureConfigDrive (second call) failed: %v", err)
+	}
+
+	if attachedAgain {
+		t.Fatal("ensureConfigDrive is not idempotent: it attached a second config drive")
+	}
+
+	t.Logf("config drive attached and idempotent")
 
 	t.Cleanup(func() {
 		logger := zaptest.NewLogger(t)
