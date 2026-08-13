@@ -15,7 +15,7 @@ Review:
 
 Include:
 
-- Provider release tag or commit
+- Provider release tag or commit (run `omni-infra-provider-xoa --version`, or read the `version` field in the startup log line)
 - Omni version
 - Xen Orchestra and XCP-ng version
 - Talos version

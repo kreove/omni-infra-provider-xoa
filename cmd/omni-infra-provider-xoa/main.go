@@ -29,6 +29,10 @@ import (
 //go:embed data/icon.svg
 var icon []byte
 
+// version is stamped at build time with -ldflags "-X main.version=...".
+// It stays "dev" for local builds.
+var version = "dev"
+
 var cfg struct {
 	omniAPIEndpoint        string
 	serviceAccountKey      string
@@ -47,6 +51,7 @@ var rootCmd = &cobra.Command{
 	Use:          "omni-infra-provider-xoa",
 	Short:        "Xen Orchestra Omni infrastructure provider",
 	Long:         "Connects to Sidero Omni as an infrastructure provider and manages Talos VMs on XCP-ng through Xen Orchestra.",
+	Version:      version,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		loggerConfig := zap.NewProductionConfig()
@@ -118,6 +123,7 @@ var rootCmd = &cobra.Command{
 
 		logger.Info(
 			"starting Xen Orchestra infrastructure provider",
+			zap.String("version", version),
 			zap.String("provider_id", meta.ProviderID),
 			zap.String("xoa_endpoint", cfg.xoaEndpoint),
 			zap.String("image_factory_base_url", cfg.imageFactoryBaseURL),

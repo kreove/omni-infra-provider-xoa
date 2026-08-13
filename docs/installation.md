@@ -75,6 +75,20 @@ PROVIDER_IMAGE=ghcr.io/kreove/omni-infra-provider-xoa:VERSION
 
 Pin a release tag or digest in production. Do not rely on `latest` for controlled upgrades.
 
+Published images are built for `linux/amd64` and `linux/arm64`, ship an SBOM and provenance attestation, and are signed with cosign. Each release's notes carry the immutable digest — prefer pinning that:
+
+```dotenv
+PROVIDER_IMAGE=ghcr.io/kreove/omni-infra-provider-xoa@sha256:...
+```
+
+Verify the signature before deploying:
+
+```bash
+cosign verify "ghcr.io/kreove/omni-infra-provider-xoa@sha256:..." \
+  --certificate-identity-regexp "^https://github.com/kreove/omni-infra-provider-xoa/" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ### Build locally
 
 From the repository root:

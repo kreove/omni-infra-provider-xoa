@@ -1,4 +1,6 @@
-FROM golang:1.26.2-alpine AS build
+# The builder always runs on the native build platform and cross-compiles for
+# the target, so multi-platform builds don't pay for QEMU emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -12,11 +14,17 @@ RUN test "$(go list -m)" = "github.com/kreove/omni-infra-provider-xoa" \
        ./internal/pkg/provider/meta \
        ./internal/pkg/provider/resources
 
+# Runs natively on the build platform. The live Xen Orchestra integration test
+# is skipped automatically because XOA_LIVE_ENDPOINT is unset here.
 RUN go test ./...
 
-RUN CGO_ENABLED=0 go build \
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/omni-infra-provider-xoa \
     ./cmd/omni-infra-provider-xoa
 

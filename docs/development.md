@@ -118,14 +118,66 @@ What it does **not** cover — still validate manually before a release, ideally
 16. System extension change
 17. Manual template override
 
-## Release recommendations
+## Continuous integration
 
-- Use semantic version tags.
-- Publish immutable container tags and digests.
-- Generate an SBOM and provenance attestation when possible.
-- Sign container images with Cosign.
-- Document supported Omni, Xen Orchestra, and XCP-ng versions in release notes.
-- Never publish credentials in example files, logs, issues, or CI artifacts.
+Two workflows run in GitHub Actions:
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | push to `master`, any pull request | gofmt check, `go mod tidy`/`verify` drift check, `go test ./...`, `go vet ./...`, binary build, container build (not pushed) |
+| `.github/workflows/release.yml` | push of a `v*` tag; manual dispatch as a dry run | runs the full CI job first, then builds and publishes the release |
+
+`release.yml` calls `ci.yml` via `workflow_call`, so a tag can never publish something that would have failed CI.
+
+## Cutting a release
+
+Releases are fully automated from a tag. To publish `v0.1.0`:
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+That triggers `release.yml`, which:
+
+1. Runs the complete CI job (format, tidy check, tests, vet, build).
+2. Builds a `linux/amd64` + `linux/arm64` container image, stamped with the version via `-X main.version=`.
+3. Pushes it to `ghcr.io/kreove/omni-infra-provider-xoa` tagged `0.1.0`, `0.1`, and `latest`, with an SBOM and max-mode provenance attached.
+4. Signs the image **digest** (not a mutable tag) with cosign, keyless via the workflow's OIDC identity.
+5. Cross-compiles `linux/amd64` and `linux/arm64` binary archives with `LICENSE`, `NOTICE.md`, and `README.md`, plus a `sha256sums.txt`.
+6. Creates the GitHub release with those archives attached, the image reference and digest in the body, and auto-generated changelog notes appended.
+
+### Prereleases
+
+A hyphen in the tag marks a prerelease: `v0.1.0-alpha.1` is flagged as a prerelease on GitHub and does **not** move the `latest` container tag. Use this while the provider is still alpha.
+
+### Dry run
+
+Run the `release` workflow manually (Actions → release → Run workflow) to exercise the entire pipeline **without publishing anything** — no image push, no signature, no GitHub release. It builds both container platforms and both binary archives, then uploads the archives as a 7-day workflow artifact so you can inspect them. Do this after changing the `Dockerfile` or the release workflow.
+
+### Verifying a published release
+
+```bash
+# Container signature (replace with the digest from the release notes)
+cosign verify "ghcr.io/kreove/omni-infra-provider-xoa@sha256:..." \
+  --certificate-identity-regexp "^https://github.com/kreove/omni-infra-provider-xoa/" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# Binary archives
+sha256sum -c sha256sums.txt
+
+# Which version a running binary or image is
+omni-infra-provider-xoa --version
+```
+
+The provider also logs its version in the `starting Xen Orchestra infrastructure provider` line at startup, which is what to quote in bug reports.
+
+### Release hygiene
+
+- Use semantic version tags, prefixed with `v`.
+- Pin immutable digests in production rather than moving tags.
+- Document tested Omni, Xen Orchestra, XCP-ng, and Talos versions in the release notes.
+- Never publish credentials in example files, logs, issues, or CI artifacts. The live integration test's credentials are supplied through environment variables and are never committed.
 
 ## Updating dependencies
 
