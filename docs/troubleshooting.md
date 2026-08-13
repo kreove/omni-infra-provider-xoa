@@ -46,6 +46,29 @@ Then recreate the container:
 docker compose up -d --force-recreate omni-infra-provider-xoa
 ```
 
+## `failed to decode service account key from options: illegal base64 data at input byte N`
+
+The container starts, logs its startup line, then exits and restarts in a loop. The service account key is present but not valid base64.
+
+The single most common cause, seen in practice, is an **extra `=` at the end** of the value — easy to introduce when copying the key, and easy to miss because base64 keys legitimately end in `=` or `==`. A valid key's length is a multiple of 4; one stray `=` makes it 1 over, and the decoder reports the position of that character.
+
+Compare the padding against another working key:
+
+```dotenv
+OMNI_VSPHERE_SERVICE_ACCOUNT_KEY=eyJ...=
+OMNI_XOA_SERVICE_ACCOUNT_KEY=eyJ...==   # <- one '=' too many
+```
+
+Check the length directly — it must divide by 4:
+
+```bash
+grep -m1 '^OMNI_XOA_SERVICE_ACCOUNT_KEY=' .env | sed 's/^[^=]*=//' | tr -d '\n' | wc -c
+```
+
+Note that line breaks are **not** a cause: Go's base64 decoder ignores `\r` and `\n`. Spaces, tabs, and quotes are fatal, and the provider strips whitespace from the key before decoding, so what remains is genuinely an invalid character.
+
+Provider versions after `v0.1.0-alpha.1` diagnose this themselves, naming the offending character and its position instead of only reporting a byte offset. If you no longer have a clean copy of the key, issue a new one with `omnictl infraprovider renewkey xoa` — it is never displayed again after creation.
+
 ## Provider is not shown as connected in Omni
 
 Check:

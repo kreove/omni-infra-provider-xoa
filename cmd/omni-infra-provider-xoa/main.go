@@ -9,10 +9,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"unicode"
 
 	"github.com/siderolabs/omni/client/pkg/client"
 	"github.com/siderolabs/omni/client/pkg/infra"
@@ -60,12 +63,20 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to create logger: %w", err)
 		}
 
+		// Values arrive from .env files, Kubernetes Secrets, and shell
+		// exports, all of which pick up stray whitespace easily.
+		normalizeConfig()
+
 		if cfg.omniAPIEndpoint == "" {
 			return fmt.Errorf("omni-api-endpoint is required")
 		}
 
 		if cfg.xoaEndpoint == "" {
 			return fmt.Errorf("xoa-endpoint is required")
+		}
+
+		if err = validateServiceAccountKey(cfg.serviceAccountKey); err != nil {
+			return err
 		}
 
 		xoaConfig := xoaclient.Config{
@@ -151,6 +162,105 @@ func app() error {
 	defer cancel()
 
 	return rootCmd.ExecuteContext(ctx)
+}
+
+// normalizeConfig cleans up configuration values that commonly arrive with
+// stray whitespace from .env files, Kubernetes Secrets, or shell exports.
+//
+// The service account key gets stricter treatment than a trim. Omni decodes it
+// with base64.StdEncoding, which ignores \r and \n but rejects spaces and tabs
+// outright, failing with an opaque "illegal base64 data at input byte N". A key
+// that picked up a stray space -- from a wrapped terminal copy, an editor, or a
+// hand-edited secret -- therefore crash-loops the provider for a reason the
+// error does not reveal. Stripping whitespace is safe, since none of it ever
+// appears in valid base64.
+func normalizeConfig() {
+	cfg.serviceAccountKey = stripWhitespace(cfg.serviceAccountKey)
+
+	cfg.omniAPIEndpoint = strings.TrimSpace(cfg.omniAPIEndpoint)
+	cfg.xoaEndpoint = strings.TrimSpace(cfg.xoaEndpoint)
+	cfg.xoaToken = strings.TrimSpace(cfg.xoaToken)
+	cfg.xoaUsername = strings.TrimSpace(cfg.xoaUsername)
+	cfg.imageFactoryBaseURL = strings.TrimSpace(cfg.imageFactoryBaseURL)
+}
+
+func stripWhitespace(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+
+		return r
+	}, value)
+}
+
+// validateServiceAccountKey fails fast with an actionable message instead of
+// letting the Omni client report a bare byte offset.
+func validateServiceAccountKey(key string) error {
+	if key == "" {
+		return nil
+	}
+
+	if _, err := base64.StdEncoding.DecodeString(key); err != nil {
+		return fmt.Errorf(
+			"OMNI_SERVICE_ACCOUNT_KEY is not valid base64: %w\n%s\n"+
+				"It must be the single-line value printed by 'omnictl infraprovider create %s'. "+
+				"The key is only ever displayed at creation, so if you no longer have a clean copy, "+
+				"issue a new one with 'omnictl infraprovider renewkey %s'.",
+			err, describeBase64Fault(key, err), meta.ProviderID, meta.ProviderID,
+		)
+	}
+
+	return nil
+}
+
+// describeBase64Fault turns a bare byte offset into a description of the actual
+// offending character. Base64 decode errors are otherwise near-impossible to
+// act on, because the value is a long opaque blob that cannot simply be eyeballed.
+func describeBase64Fault(key string, err error) string {
+	var corrupt base64.CorruptInputError
+	if !errors.As(err, &corrupt) {
+		return "The value does not decode as base64. Check that it was copied in full."
+	}
+
+	offset := int(corrupt)
+	if offset < 0 || offset >= len(key) {
+		return fmt.Sprintf(
+			"The value is %d characters long and appears to be truncated. Check that it was copied in full.",
+			len(key),
+		)
+	}
+
+	bad := key[offset]
+
+	switch {
+	case bad == '=':
+		// Confirmed in the field: a duplicated trailing '=' from a copy/paste.
+		return fmt.Sprintf(
+			"Character %d of %d is '=', which is base64 padding appearing where it is not valid. "+
+				"This almost always means an extra '=' was appended when the value was copied. "+
+				"A key ends with either one '=' or two, never three, and its total length is a "+
+				"multiple of 4 (this one is %d). Try removing the trailing '='.",
+			offset+1, len(key), len(key),
+		)
+	case bad == ' ' || bad == '\t':
+		return fmt.Sprintf(
+			"Character %d of %d is whitespace. The provider strips whitespace before decoding, so "+
+				"seeing this means it was re-introduced elsewhere, e.g. by shell quoting.",
+			offset+1, len(key),
+		)
+	case bad == '"' || bad == '\'':
+		return fmt.Sprintf(
+			"Character %d of %d is a quote. Quotes around the value in a .env file should not be "+
+				"included in the value itself.",
+			offset+1, len(key),
+		)
+	default:
+		return fmt.Sprintf(
+			"Character %d of %d is %q, which is not part of the base64 alphabet (A-Z a-z 0-9 + / =).",
+			offset+1, len(key), string(bad),
+		)
+	}
 }
 
 func firstNonEmpty(values ...string) string {
