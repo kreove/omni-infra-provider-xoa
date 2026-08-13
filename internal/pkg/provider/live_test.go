@@ -181,16 +181,36 @@ func TestLiveXOProvisioning(t *testing.T) {
 		t.Fatalf("StartVm failed: %v", err)
 	}
 
-	running, err := client.GetVm(xoaclient.Vm{Id: vm.Id})
-	if err != nil {
-		t.Fatalf("GetVm failed: %v", err)
+	// A single Running check is not a boot assertion. An earlier version of
+	// this test passed while every VM it certified was crashing ~30 seconds
+	// after power-on (Xen killed them out of populate-on-demand memory before
+	// the kernel console existed; XAPI cycles a crashed guest through
+	// Running -> Paused -> Halted). Require the VM to stay Running for a
+	// sustained window instead: a guest that survives it has a booted kernel.
+	const (
+		bootWatch    = 3 * time.Minute
+		bootInterval = 10 * time.Second
+	)
+
+	deadline := time.Now().Add(bootWatch)
+	for time.Now().Before(deadline) {
+		current, gerr := client.GetVm(xoaclient.Vm{Id: vm.Id})
+		if gerr != nil {
+			t.Fatalf("GetVm failed while watching boot: %v", gerr)
+		}
+
+		if current.PowerState != xoaclient.RunningPowerState {
+			t.Fatalf(
+				"VM left the Running state (%q) during the %s boot watch: the guest is crashing, not booting. "+
+					"Check `xl dmesg` on the XCP-ng host for the reason.",
+				current.PowerState, bootWatch,
+			)
+		}
+
+		time.Sleep(bootInterval)
 	}
 
-	if running.PowerState != xoaclient.RunningPowerState {
-		t.Fatalf("expected VM to be running, got power state %q", running.PowerState)
-	}
-
-	t.Logf("VM is running; cleanup will power off and deprovision it")
+	t.Logf("VM stayed Running for %s; cleanup will power off and deprovision it", bootWatch)
 }
 
 func requireEnv(t *testing.T, name string) string {

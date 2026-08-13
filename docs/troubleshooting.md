@@ -129,6 +129,30 @@ Check:
 
 `Running → Paused → Halted` in Xen Orchestra is XAPI's crash handling: it pauses the domain to capture a coredump, then destroys it. The guest is crashing, not failing to boot.
 
+**Check the hypervisor's log first** — a guest that dies before its kernel console initializes produces no output anywhere a console can show, and the reason is only visible on the XCP-ng host:
+
+```bash
+xl dmesg | tail -60
+```
+
+The one instance of this investigated so far (provider `v0.1.0-alpha.2` and earlier) showed:
+
+```text
+p2m_pod_demand_populate: Dom79 out of PoD memory! (tot=66075 ents=983008)
+domain_crash called from p2m_pod_demand_populate
+```
+
+Root cause: the provider set the VM's *static* memory maximum but not its *dynamic* memory range, which stayed at the 256 MiB inherited from the "Other install media" seed template. XAPI boots an HVM guest whose dynamic memory is below its static maximum in Xen **populate-on-demand** mode — the guest sees the full static-max but only the dynamic amount is actually backed, and it is expected to balloon down before touching the rest. Talos has no balloon driver running in early boot and touches memory immediately (`init_on_alloc=1`), so Xen crashed every VM within seconds. Fixed in the release after `v0.1.0-alpha.2` by pinning dynamic-min = dynamic-max = static-max, which disables PoD (the same thing XO's own VM-creation UI does).
+
+VMs created by an affected version can be repaired in place while Halted — the provider's reconcile loop powers them back on automatically:
+
+```bash
+xe vm-list name-label=<vm-name> params=uuid --minimal
+xe vm-memory-limits-set uuid=<UUID> static-min=134217728 \
+  dynamic-min=<BYTES> dynamic-max=<BYTES> static-max=<BYTES>
+# <BYTES> = the Machine Class memory, e.g. 4294967296 for 4 GiB
+```
+
 If the XO console shows the Talos boot entry and `Booting the kernel (entry_offset: ...)` and then goes blank, the boot chain is fine — the disk, bootloader, partition table, and firmware are all working. What you are missing is everything the kernel printed afterwards.
 
 Provider versions up to and including `v0.1.0-alpha.1` set only `console=ttyS0,38400n8` as an extra kernel argument (inherited from the VergeOS provider, which enabled a serial port on its VMs). XCP-ng HVM guests have no serial port unless one is configured, so `/dev/console` pointed at a device that did not exist and every later message — including the panic — was discarded. Later versions append `console=tty0` so output lands on the console XO shows you.

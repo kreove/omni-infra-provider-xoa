@@ -198,8 +198,23 @@ func (p *Provisioner) createVM(
 		CPUs: xoaclient.CPUs{
 			Number: providerData.Cores,
 		},
+		// Static AND dynamic memory must all be set to the requested size.
+		// Setting only Static sends memoryStaticMax alone, and the VM inherits
+		// dynamic-min/max (256 MiB) from the seed template. XAPI boots an HVM
+		// guest whose dynamic memory is below its static max in Xen
+		// populate-on-demand mode: the guest sees static-max of RAM but only
+		// dynamic-min is actually backed, and the guest is expected to balloon
+		// down before touching the rest. Talos runs no balloon driver in early
+		// boot and touches memory immediately (init_on_alloc=1), so Xen killed
+		// every VM within seconds -- before the kernel console existed -- with
+		// "p2m_pod_demand_populate: out of PoD memory" visible only in the
+		// host's `xl dmesg`. Dynamic[1] becomes memoryMax at creation and
+		// Dynamic[0] becomes memoryMin in the SDK's follow-up vm.set, which
+		// pins dynamic-min = dynamic-max = static-max and disables PoD, the
+		// same thing Xen Orchestra's own VM-creation UI does.
 		Memory: xoaclient.MemoryObject{
-			Static: []int{memoryBytes, memoryBytes},
+			Static:  []int{memoryBytes, memoryBytes},
+			Dynamic: []int{memoryBytes, memoryBytes},
 		},
 		Disks: []xoaclient.Disk{
 			{
