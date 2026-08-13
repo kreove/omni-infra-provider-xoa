@@ -84,7 +84,7 @@ The provider currently creates VMs with:
 
 - A fast clone of the resolved template's disk, resized to `disk_size`
 - A single VIF on `network_id`
-- `cloudConfig` set to the Omni Machine Join Config
+- A `cidata` NoCloud config drive carrying the Omni Machine Join Config, attached before first boot
 - `networkConfig` set to a minimal NoCloud network-config
 
 Existing VMs are not resized or otherwise reconciled when Machine Class CPU, RAM, disk, or network settings change. Those settings apply to newly provisioned machines.

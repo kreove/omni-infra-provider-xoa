@@ -13,7 +13,7 @@ A community infrastructure provider that lets [Sidero Omni](https://docs.siderol
 - Image caching by Talos version, architecture, and Omni schematic, reused as a clonable golden template
 - Omni-controlled system extensions and Talos versions
 - Optional use of an existing Xen Orchestra template (manual override)
-- NoCloud cloud-init join config delivery via Xen Orchestra's `cloudConfig`/`networkConfig`
+- NoCloud cloud-init join config delivery via a config drive the provider builds itself
 - Docker Compose and Kubernetes deployment examples
 - API-token or username/password authentication to Xen Orchestra
 
@@ -27,7 +27,7 @@ flowchart LR
     C -- Yes --> E[Clone template into new VM]
     D --> E
     E --> F[Attach VIF on selected network]
-    F --> G[Inject Omni join config via cloudConfig/networkConfig]
+    F --> G[Attach NoCloud config drive with the Omni join config]
     G --> H[Boot Talos VM]
     H --> I[Machine connects to Omni]
 ```
@@ -202,7 +202,7 @@ Ported from `omni-infra-provider-vergeos` and validated end-to-end against a liv
 - Golden-template build (download, decompress, upload, attach, convert-to-template) from a real Talos Image Factory image
 - Template-cache reuse on a subsequent request
 - VM creation by fast-cloning the template, with the boot disk resized correctly and a VIF attached to the requested network
-- Cloud-init delivery via `cloudConfig`/`networkConfig`
+- Cloud-init delivery via a provider-built NoCloud config drive
 - Power on and full deprovisioning (VIFs, disks, VM all removed)
 
 That validation pass also found and fixed several real gaps between the Go SDK's assumptions and what XO's JSON-RPC API actually expects — see [Compatibility and limitations](docs/compatibility.md#findings-from-live-validation) for the details. It has not yet been exercised through an actual Omni-driven cluster (Machine Requests via `omnictl`/cluster templates, scale-up/down, multiple concurrent machines) — see [Development and releases](docs/development.md#live-test-checklist) for what's still open.

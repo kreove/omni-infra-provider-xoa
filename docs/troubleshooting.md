@@ -169,6 +169,37 @@ Things worth ruling out before assuming a provider bug, since none of them were 
 | Storage | The SR must not be full |
 | Image integrity | Export the template VDI and confirm it starts with an MBR signature and an `EFI PART` GPT header |
 
+## Talos boots but stays in maintenance mode and never joins Omni
+
+The dashboard shows `STAGE: Maintenance`, Omni shows the machine as "Provisioned / Waiting for the machine to join Omni", and the Talos log contains:
+
+```text
+downloading config {"controller": "config.AcquireController", "platform": "nocloud"}
+volume status {"volume": "platform/cidata/config", "phase": "waiting -> missing"}
+entering maintenance service
+```
+
+Talos could not find the NoCloud config drive. Ask the machine what it can see — a node in maintenance mode answers insecure API calls:
+
+```bash
+talosctl get discoveredvolumes -e <node-ip> -n <node-ip> --insecure
+```
+
+A working config drive appears as a partition or disk with `vfat` and the label `cidata`. If the config drive shows up as a bare `disk` with no type and no label, Talos cannot read it.
+
+This was the behaviour of every VM created by `v0.1.0-alpha.2` and earlier, which asked Xen Orchestra to build the drive via the `cloudConfig` parameter. XO's drive has the right contents and the right `cidata` label, but it wraps the FAT16 filesystem in an MBR whose only partition begins at LBA 1. That layout is ambiguous with a whole-disk filesystem, so Talos's prober rejects the partition table and then finds only the MBR at offset 0. Later versions build the drive themselves — a plain FAT16 at offset 0 — and attach it before the first power-on.
+
+If you need to confirm what is on a config drive, export the VDI and inspect it:
+
+```bash
+curl -k -H "Cookie: authenticationToken=$XOA_TOKEN" \
+  "https://xoa.example.com/rest/v0/vdis/<vdi-uuid>.raw" -o cfg.img
+file cfg.img          # a readable drive reports a FAT filesystem, not "data"
+```
+
+> [!WARNING]
+> Only export a VDI whose VM is **halted**. Exporting an attached VDI can leave it flagged "not detached cleanly", after which the VM fails to start with `SR_BACKEND_FAILURE_46`. Recover with `xe-toolstack-restart` on the host that owns the VM, or by removing the affected disk.
+
 ## VM is created but does not join Omni
 
 Check the VM's console in Xen Orchestra and verify:
@@ -180,7 +211,7 @@ Check the VM's console in Xen Orchestra and verify:
 - The VM can reach the Omni SideroLink and API endpoints.
 - Firewall rules allow the ports configured by your Omni deployment.
 
-The provider injects the Omni Machine Join Config as Xen Orchestra `cloudConfig` (delivered to the guest as NoCloud `user-data`).
+The provider builds a NoCloud config drive containing the Omni Machine Join Config and attaches it as a disk named `cidata` before the VM is first powered on.
 
 ## Duplicate VM name
 
