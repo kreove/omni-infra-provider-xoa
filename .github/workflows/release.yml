@@ -118,7 +118,9 @@ jobs:
 
       - name: Install cosign
         if: steps.version.outputs.publish == 'true'
-        uses: sigstore/cosign-installer@v4
+        # cosign-installer publishes only exact semver tags, no floating major
+        # ref, so this must be pinned precisely. Dependabot keeps it current.
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign container image
         if: steps.version.outputs.publish == 'true'
