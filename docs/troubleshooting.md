@@ -51,12 +51,18 @@ docker compose up -d --force-recreate omni-infra-provider-xoa
 Check:
 
 1. The Omni infrastructure-provider ID matches `--id`.
-2. The service account key belongs to that provider ID.
+2. The service account key belongs to that provider ID, and the account is an **infrastructure provider** account (`infra-provider:xoa` with the `InfraProvider` role) rather than a plain service account.
 3. `OMNI_ENDPOINT` includes the URL scheme.
 4. The provider container can resolve and reach Omni.
 5. TLS verification is succeeding.
 
-Recreate credentials if necessary:
+Confirm the registration exists and what Omni thinks its status is:
+
+```bash
+omnictl infraprovider list
+```
+
+Recreate credentials if necessary — the key is only ever displayed at creation time, so this is the correct fix for a lost key (there is nowhere in the UI to read the existing one back):
 
 ```bash
 omnictl infraprovider renewkey xoa

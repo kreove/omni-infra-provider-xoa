@@ -19,7 +19,37 @@ OMNI_ENDPOINT=https://omni.example.com
 OMNI_SERVICE_ACCOUNT_KEY=eyJ...
 ```
 
-Store the key as a secret. To use another provider ID, start the binary with `--id <provider-id>` and create the Omni infrastructure provider using that same ID.
+> [!IMPORTANT]
+> **The service account key is printed once, at creation, and is never retrievable afterwards.** It is not shown anywhere in the Omni UI later — not under **Settings → Infra Providers** and not under **Settings → Service Accounts**. Copy it out of the command output (or the UI dialog) immediately and store it as a secret.
+>
+> If you have already lost it, do not delete and recreate the provider — issue a new key instead:
+>
+> ```bash
+> omnictl infraprovider renewkey xoa
+> ```
+>
+> That prints a fresh `OMNI_SERVICE_ACCOUNT_KEY` for the same provider ID and invalidates the previous one.
+
+To use another provider ID, start the binary with `--id <provider-id>` and create the Omni infrastructure provider using that same ID.
+
+Useful related commands:
+
+```bash
+omnictl infraprovider list          # IDs, connection status, and errors
+omnictl infraprovider delete xoa    # remove a provider registration
+```
+
+### Creating the service account directly
+
+`omnictl infraprovider create xoa` is a convenience wrapper: underneath it creates a service account named `infra-provider:xoa` with the `InfraProvider` role. That is why the account shows up as `infra-provider:xoa`, not `xoa`, if you go looking for it in the UI.
+
+You can create it explicitly instead, which is the form the Sidero KubeVirt provider documents:
+
+```bash
+omnictl serviceaccount create --use-user-role=false --role=InfraProvider infra-provider:xoa
+```
+
+Both approaches are equivalent. A *plain* service account created without `--role=InfraProvider` — or without the `infra-provider:` name prefix — will authenticate but will not be allowed to act as an infrastructure provider, so make sure you created the right kind.
 
 For multiple independent Xen Orchestra instances, run one provider instance per instance and give each instance a unique provider ID and Omni service account.
 

@@ -58,9 +58,11 @@ The service-account name must match the provider ID. The default provider ID is 
 omnictl infraprovider create xoa
 ```
 
-Save the returned `OMNI_ENDPOINT` and `OMNI_SERVICE_ACCOUNT_KEY` values.
+Save the returned `OMNI_ENDPOINT` and `OMNI_SERVICE_ACCOUNT_KEY` values. **The key is shown only at creation and cannot be read back later from the Omni UI** — if you lose it, run `omnictl infraprovider renewkey xoa` to issue a new one.
 
-You can also create the provider from **Settings → Infra Providers** in the Omni UI.
+You can also create the provider from **Settings → Infra Providers** in the Omni UI, which displays the key once in the creation dialog.
+
+See [Installation](docs/installation.md#1-register-an-infrastructure-provider-in-omni) for details, including how to create the underlying `infra-provider:xoa` service account explicitly.
 
 ### 2. Create a Xen Orchestra API token
 
