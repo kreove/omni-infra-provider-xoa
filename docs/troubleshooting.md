@@ -125,6 +125,26 @@ Check:
 - The requested asset is `nocloud-amd64.raw.xz` (not `.qcow2`).
 - A reverse proxy is not stripping the `/image/...` path.
 
+## VM boots, console goes blank, then the VM cycles Running → Paused → Halted
+
+`Running → Paused → Halted` in Xen Orchestra is XAPI's crash handling: it pauses the domain to capture a coredump, then destroys it. The guest is crashing, not failing to boot.
+
+If the XO console shows the Talos boot entry and `Booting the kernel (entry_offset: ...)` and then goes blank, the boot chain is fine — the disk, bootloader, partition table, and firmware are all working. What you are missing is everything the kernel printed afterwards.
+
+Provider versions up to and including `v0.1.0-alpha.1` set only `console=ttyS0,38400n8` as an extra kernel argument (inherited from the VergeOS provider, which enabled a serial port on its VMs). XCP-ng HVM guests have no serial port unless one is configured, so `/dev/console` pointed at a device that did not exist and every later message — including the panic — was discarded. Later versions append `console=tty0` so output lands on the console XO shows you.
+
+Upgrade the provider, let it build a new golden template (changing kernel arguments changes the Image Factory schematic, so a fresh image is downloaded), and read the panic off the console.
+
+Things worth ruling out before assuming a provider bug, since none of them were the cause in the one case investigated so far:
+
+| Check | How |
+| --- | --- |
+| Memory | Talos needs 2 GiB for a control plane node, 1 GiB for a worker |
+| Disk | 10 GiB minimum |
+| CPU | Talos requires `x86-64-v2` (Nehalem, 2008, or newer) |
+| Storage | The SR must not be full |
+| Image integrity | Export the template VDI and confirm it starts with an MBR signature and an `EFI PART` GPT header |
+
 ## VM is created but does not join Omni
 
 Check the VM's console in Xen Orchestra and verify:

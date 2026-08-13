@@ -55,10 +55,17 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			return validateProviderData(providerData)
 		}),
 		provision.NewStep("createSchematic", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			// Keep the serial console for hosts that provide one, but make tty0
+			// the last console= so it owns /dev/console. XCP-ng HVM guests do
+			// not get a serial port unless one is configured, and the VergeOS
+			// provider this was ported from enabled one explicitly. Without
+			// tty0 every message after early boot -- including kernel panics --
+			// is written to a device that does not exist, leaving the XO
+			// console blank and the failure invisible.
 			schematic, err := pctx.GenerateSchematicID(
 				ctx,
 				logger,
-				provision.WithExtraKernelArgs("console=ttyS0,38400n8"),
+				provision.WithExtraKernelArgs("console=ttyS0,38400n8", "console=tty0"),
 				provision.WithoutConnectionParams(),
 			)
 			if err != nil {
@@ -204,6 +211,10 @@ func (p *Provisioner) createVM(
 			},
 		},
 		CloneType: xoaclient.CloneTypeFastClone,
+		// Set explicitly rather than inheriting from the template: Talos will
+		// not boot under BIOS, and a template built by an older version of this
+		// provider (or supplied via template_id) may still be BIOS.
+		Boot: xoaclient.Boot{Firmware: bootFirmware},
 		VIFsMap: []map[string]string{
 			{"network": providerData.NetworkID},
 		},

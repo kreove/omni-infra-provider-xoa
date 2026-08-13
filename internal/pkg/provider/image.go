@@ -31,6 +31,13 @@ const (
 	imageCachePrefix = "omni-talos-"
 	managedTag       = "omni-managed"
 
+	// bootFirmware is fixed to UEFI. Talos images for XCP-ng are built to boot
+	// via UEFI (Sidero's Xen Orchestra guide uses a "Generic Linux UEFI"
+	// template), and a BIOS VM cannot boot them at all. This is not exposed as
+	// a Machine Class option because BIOS is never a working choice here; use
+	// a manual template_id if you need different firmware.
+	bootFirmware = "uefi"
+
 	// baseSeedTemplateName is the built-in, diskless XO template used as the
 	// starting point when building a new golden Talos template. XO ships this
 	// template on every pool.
@@ -213,6 +220,11 @@ func (p *Provisioner) importGoldenTemplate(
 		"CPUs":             1,
 		"bootAfterCreate":  false,
 		"tags":             []string{managedTag},
+		// Talos on XCP-ng requires UEFI; Sidero's Xen Orchestra guide builds
+		// its template on "Generic Linux UEFI" for exactly this reason. The
+		// base seed template used here defaults to BIOS, and a BIOS VM cannot
+		// boot the Talos nocloud image -- it powers on, fails, and halts.
+		"hvmBootFirmware": bootFirmware,
 	}
 	if err = p.client.Call("vm.create", seedParams, &vmID); err != nil {
 		return "", fmt.Errorf("failed to create seed VM for %q: %w", cacheName, err)

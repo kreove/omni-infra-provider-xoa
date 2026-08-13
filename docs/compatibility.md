@@ -20,7 +20,7 @@ See `go.mod` for the authoritative dependency versions.
 | --- | --- |
 | `amd64` | Supported |
 | `arm64` | Not supported (XCP-ng is x86-only) |
-| UEFI / boot firmware | Inherited from the golden/manual template, not a per-Machine-Class setting |
+| UEFI / boot firmware | Forced to UEFI, matching Sidero's Xen Orchestra guide; not a per-Machine-Class setting |
 | Secure Boot | Not configured by the provider (defaults to the template's setting) |
 | NoCloud join config via `cloudConfig`/`networkConfig` | Supported |
 | Automatic Image Factory import | Supported and validated live; relies on two unwrapped XO JSON-RPC calls — see below |
