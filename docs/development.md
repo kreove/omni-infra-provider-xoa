@@ -114,18 +114,20 @@ changes to provisioning:
 6. Scale-up and scale-down of a machine set
 7. Node replacement
 8. Cluster teardown and deprovisioning without stale VIFs, disks, or VMs
+9. Talos version upgrade — applied in place by Omni, so the provider is not exercised and
+   builds no new template; machines keep descending from the template they were created from
 
 Never yet exercised — do these before calling the provider beta:
 
-9. Provider restart with machines in flight
-10. Omni restart with machines in flight
-11. Invalid pool ID failure
-12. Invalid network ID failure
-13. Xen Orchestra permission failure, and running as a non-admin account
-14. Failed Image Factory URL/import behavior
-15. Talos version change (new schematic, new template build, rollout)
-16. System extension change
-17. Manual `template_id` override against a hand-built template
+1. Provider restart with machines in flight
+2. Omni restart with machines in flight
+3. Invalid pool ID failure
+4. Invalid network ID failure
+5. Xen Orchestra permission failure, and running as a non-admin account
+6. Failed Image Factory URL/import behavior
+7. System extension change (same mechanism as a version change, but it *does* build a new
+   template, because the schematic changes before any machine exists)
+8. Manual `template_id` override against a hand-built template
 
 ## Continuous integration
 

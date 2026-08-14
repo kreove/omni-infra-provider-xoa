@@ -14,10 +14,10 @@ This provider is a community alpha, ported from [omni-infra-provider-vergeos](ht
 | Machine set scale up and down | |
 | Node replacement | |
 | Deprovisioning | VIFs, disks and VM removed; cached templates retained |
+| Talos version upgrade | applied in place by Omni; the provider is not involved and builds no new template |
 
 | Not yet exercised | |
 | --- | --- |
-| Talos version upgrade | a new version produces a new schematic and a fresh template build |
 | System-extension changes | same mechanism as a version change |
 | Manual `template_id` override | implemented but never run against a hand-built template |
 | Provider restart with machines in flight | reconciliation is designed to resume, untested |

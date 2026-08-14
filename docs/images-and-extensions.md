@@ -102,11 +102,17 @@ Talos golden image managed by Sidero Omni. Built from
 https://factory.talos.dev/image/<schematic>/<version>/nocloud-amd64.raw.xz
 ```
 
-Compare that against what your clusters actually run — the Talos version appears on the machine's dashboard, and the schematic in the boot log as `enabling system extension schematic <id>`.
+> [!WARNING]
+> A template records the version a machine was **created** at, which is not necessarily the version it **runs**. Talos upgrades are applied in place — Omni writes the new version to the machine's alternate boot partition over SideroLink, and the infrastructure provider is not involved — so after an upgrade a machine still descends from the template it was originally cloned from while running something newer. Comparing a template's version against a running cluster is therefore not a reliable way to spot a stale template.
 
-**Deciding what is safe to remove.** A template is still needed if any live VM's boot disk descends from it: machines are fast clones, so their disks are copy-on-write children of the template's VDI. Keep one template per Talos version *and* schematic combination in use. Two clusters on different Talos versions legitimately need two templates, which is easy to mistake for leftovers.
+**Deciding what is safe to remove.** Only one test is reliable: does any live VM's boot disk descend from it? Machines are fast clones, so their disks are copy-on-write children of the template's VDI. Follow each VM's `disk0` chain through its VDI `parent` links to the root and compare that against the template's VDI. Anything with no live descendants is safe to delete, whatever its version says.
 
-To check a template before deleting it, compare the root of each VM's `disk0` chain (follow the VDI `parent` links) against the template's VDI. Anything with no live descendants is safe.
+Two things make templates look staler than they are:
+
+- Two clusters on different Talos versions legitimately keep two templates.
+- After an upgrade, machines still pin the template they were created from, even though its version now looks out of date.
+
+Scaling up a cluster that has been upgraded creates machines from a template built for the *new* version, while the original machines still descend from the old one. A single cluster can therefore legitimately span several templates, none of which can be removed until the machines pinning them are gone.
 
 **Removing one.** Delete the *template*, not just its disk — removing the VDI alone leaves a broken template object behind. Deleting a template does not disturb VMs already cloned from it; the storage layer keeps the shared base and coalesces in the background.
 
