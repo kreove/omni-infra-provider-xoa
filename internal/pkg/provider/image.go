@@ -214,7 +214,7 @@ func (p *Provisioner) importGoldenTemplate(
 
 	var vmID string
 	seedParams := map[string]interface{}{
-		"name_label":       cacheName,
+		"name_label": cacheName,
 		// The name is a hash of the source URL, so it identifies the image
 		// uniquely but tells an operator nothing. Record the URL it was built
 		// from: it names the Talos version and schematic, which is what
