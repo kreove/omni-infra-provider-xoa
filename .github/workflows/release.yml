@@ -129,8 +129,32 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          # Keyless signing against the immutable digest, not a mutable tag.
-          cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+          # Keyless signing depends on Sigstore's public Fulcio, Rekor and
+          # timestamp services. Those are ordinarily reliable but do drop
+          # connections: v0.1.0-alpha.3 failed on
+          # "Post https://timestamp.sigstore.dev/api/v1/timestamp:
+          # connection reset by peer", which aborted the release after the
+          # image had already been pushed, leaving it published but unsigned
+          # and skipping the binaries and the GitHub release entirely.
+          # Retry before giving up, since the failure is almost always
+          # transient and the cost of a false failure is a half-published
+          # release.
+          for attempt in 1 2 3 4 5; do
+            if cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"; then
+              echo "signed on attempt ${attempt}"
+              exit 0
+            fi
+
+            if [[ "${attempt}" == 5 ]]; then
+              echo "::error::cosign failed after ${attempt} attempts"
+              exit 1
+            fi
+
+            delay=$((attempt * 15))
+            echo "::warning::cosign attempt ${attempt} failed, retrying in ${delay}s"
+            sleep "${delay}"
+          done
 
       - name: Set up Go
         uses: actions/setup-go@v7
