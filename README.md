@@ -3,7 +3,7 @@
 A community infrastructure provider that lets [Sidero Omni](https://docs.siderolabs.com/omni/) create, scale, and delete [Talos Linux](https://www.talos.dev/) virtual machines on XCP-ng through [Xen Orchestra](https://xen-orchestra.com/).
 
 > [!IMPORTANT]
-> This project is community maintained and is not an official Sidero Labs or Vates product. It is currently an **alpha release**, ported from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos). The full lifecycle (golden-template build, VM clone, VIF/cloud-init, power on, deprovision) has been validated end-to-end against a live XCP-ng pool managed by Xen Orchestra — see [Compatibility and limitations](docs/compatibility.md) for what that covered and the known gaps that remain. Test it in your own non-production environment before relying on it for critical clusters.
+> This project is community maintained and is not an official Sidero Labs or Vates product. It is an **alpha release**, ported from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos). Omni-driven cluster creation, scaling, node replacement and teardown have all been exercised against a live XCP-ng pool — see [Compatibility and limitations](docs/compatibility.md) for what that covered and what remains untested. It has been validated on one environment only, so try it in your own non-production environment first.
 
 ## Features
 
@@ -197,15 +197,19 @@ The required Go version is declared in `go.mod`.
 
 ## Release status
 
-Ported from `omni-infra-provider-vergeos` and validated end-to-end against a live XCP-ng pool managed by Xen Orchestra:
+Ported from `omni-infra-provider-vergeos` and validated against a live XCP-ng pool managed by Xen Orchestra, driven by a real Omni instance:
 
 - Golden-template build (download, decompress, upload, attach, convert-to-template) from a real Talos Image Factory image
-- Template-cache reuse on a subsequent request
-- VM creation by fast-cloning the template, with the boot disk resized correctly and a VIF attached to the requested network
-- Cloud-init delivery via a provider-built NoCloud config drive
-- Power on and full deprovisioning (VIFs, disks, VM all removed)
+- Template-cache reuse, including four concurrent Machine Requests sharing a single build
+- VM creation by fast-cloning the template, with the boot disk resized and a VIF attached to the requested network
+- Join-config delivery via a provider-built NoCloud config drive
+- Talos booting, joining Omni, and forming a healthy Kubernetes cluster
+- Creating and tearing down whole clusters, scaling machine sets up and down, and replacing individual nodes
+- Deprovisioning that removes VIFs, disks and the VM, leaving cached templates intact
 
-That validation pass also found and fixed several real gaps between the Go SDK's assumptions and what XO's JSON-RPC API actually expects — see [Compatibility and limitations](docs/compatibility.md#findings-from-live-validation) for the details. It has not yet been exercised through an actual Omni-driven cluster (Machine Requests via `omnictl`/cluster templates, scale-up/down, multiple concurrent machines) — see [Development and releases](docs/development.md#live-test-checklist) for what's still open.
+Getting there found and fixed several real incompatibilities between the Go SDK's assumptions, Xen Orchestra's API, and what Talos requires of a Xen guest — see [Compatibility and limitations](docs/compatibility.md#findings-from-live-validation), which is worth reading before deploying.
+
+Still unexercised: Talos version upgrades and system-extension changes, the manual `template_id` override, provider and Omni restarts with machines in flight, and running against a non-admin Xen Orchestra account. See [Development and releases](docs/development.md#live-test-checklist).
 
 ## License
 

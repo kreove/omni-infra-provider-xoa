@@ -98,25 +98,34 @@ Add `XOA_LIVE_KEEP_TEMPLATE=1` to leave the built golden template in place after
 
 This test is not run in CI (no live credentials are available there) and creates/deletes real infrastructure in whatever pool you point it at — don't point it at production.
 
-What it does **not** cover — still validate manually before a release, ideally through a real Omni instance rather than by calling provider internals directly:
+The test drives provider internals directly, so it proves the Xen Orchestra
+side works but cannot prove a machine joins Omni — a VM whose config drive is
+unreadable stays happily `Running` forever, which is exactly how a real bug
+once passed this test. Anything below the line needs a real Omni instance.
+
+Already exercised against a live environment, and worth repeating after
+changes to provisioning:
 
 1. Fresh provider registration in Omni
 2. Automatic first image import (golden-template build)
-3. Reuse of the cached template
-4. One-machine cluster creation
-5. Three-control-plane cluster creation
-6. Worker scale-up
-7. Worker scale-down
-8. Full deprovisioning without stale VIFs, disks, or VMs
-9. Provider restart with active machines
-10. Omni restart with active machines
+3. Reuse of the cached template, including concurrent Machine Requests
+4. Cluster creation, including three control planes
+5. Machines joining Omni and Kubernetes reaching a healthy state
+6. Scale-up and scale-down of a machine set
+7. Node replacement
+8. Cluster teardown and deprovisioning without stale VIFs, disks, or VMs
+
+Never yet exercised — do these before calling the provider beta:
+
+9. Provider restart with machines in flight
+10. Omni restart with machines in flight
 11. Invalid pool ID failure
 12. Invalid network ID failure
-13. Xen Orchestra permission failure
+13. Xen Orchestra permission failure, and running as a non-admin account
 14. Failed Image Factory URL/import behavior
-15. Talos version change
+15. Talos version change (new schematic, new template build, rollout)
 16. System extension change
-17. Manual template override
+17. Manual `template_id` override against a hand-built template
 
 ## Continuous integration
 

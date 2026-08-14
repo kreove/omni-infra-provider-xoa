@@ -2,7 +2,30 @@
 
 ## Release status
 
-This provider is a community alpha, ported from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos). It builds, passes unit tests, and has been validated end-to-end against a live XCP-ng pool managed by Xen Orchestra: golden-template build, template-cache reuse, VM clone with correctly resized disk and VIF, cloud-init delivery, power-on, and full deprovisioning. See [Findings from live validation](#findings-from-live-validation) for what that testing found and fixed, and what's still open. It has not yet been driven through an actual Omni instance (real Machine Requests, scale-up/down), and it has not been certified by Sidero Labs or Vates.
+This provider is a community alpha, ported from [omni-infra-provider-vergeos](https://github.com/kreove/omni-infra-provider-vergeos). It has been driven by a real Omni instance against a live XCP-ng pool managed by Xen Orchestra, covering the full machine lifecycle:
+
+| Exercised | |
+| --- | --- |
+| Golden-template build from Talos Image Factory | including four concurrent Machine Requests sharing one build |
+| Template-cache reuse | second and later requests skip the download |
+| VM creation | clone, disk resize, VIF, config drive, power-on |
+| Talos boot and Omni join | machines register and a healthy Kubernetes cluster forms |
+| Cluster create and destroy | repeatedly |
+| Machine set scale up and down | |
+| Node replacement | |
+| Deprovisioning | VIFs, disks and VM removed; cached templates retained |
+
+| Not yet exercised | |
+| --- | --- |
+| Talos version upgrade | a new version produces a new schematic and a fresh template build |
+| System-extension changes | same mechanism as a version change |
+| Manual `template_id` override | implemented but never run against a hand-built template |
+| Provider restart with machines in flight | reconciliation is designed to resume, untested |
+| Omni restart with machines in flight | |
+| Non-admin Xen Orchestra account | see [Required permissions](installation.md#required-permissions) |
+| More than one pool, SR, or provider instance | supported by the schema, never run |
+
+All of this was validated on a single environment: XCP-ng 8.3 on Ivy Bridge hosts, Xen Orchestra, Talos 1.13.x, `amd64`. See [Findings from live validation](#findings-from-live-validation) for the incompatibilities that testing uncovered. It has not been certified by Sidero Labs or Vates.
 
 ## Build-time dependencies
 
