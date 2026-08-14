@@ -93,12 +93,22 @@ Official self-hosted Image Factory guide:
 
 The provider intentionally does not delete cached golden templates during VM deprovisioning because they may be shared by other machines or future scale-up operations.
 
-For now, clean unused templates manually:
+For now, clean unused templates manually.
 
-1. Filter Xen Orchestra templates for names beginning with `omni-talos-`.
-2. Confirm no VM was cloned from the template that is still in use (templates themselves aren't directly "referenced," but treat any recently-used cache name as live).
-3. Retain templates required for active clusters or rollback.
-4. Delete only templates that are no longer needed.
+**Identifying a template.** The name is a hash, so it says nothing on its own. Each template's *description* records the Image Factory URL it was built from, which names the Talos version and schematic:
+
+```text
+Talos golden image managed by Sidero Omni. Built from
+https://factory.talos.dev/image/<schematic>/<version>/nocloud-amd64.raw.xz
+```
+
+Compare that against what your clusters actually run — the Talos version appears on the machine's dashboard, and the schematic in the boot log as `enabling system extension schematic <id>`.
+
+**Deciding what is safe to remove.** A template is still needed if any live VM's boot disk descends from it: machines are fast clones, so their disks are copy-on-write children of the template's VDI. Keep one template per Talos version *and* schematic combination in use. Two clusters on different Talos versions legitimately need two templates, which is easy to mistake for leftovers.
+
+To check a template before deleting it, compare the root of each VM's `disk0` chain (follow the VDI `parent` links) against the template's VDI. Anything with no live descendants is safe.
+
+**Removing one.** Delete the *template*, not just its disk — removing the VDI alone leaves a broken template object behind. Deleting a template does not disturb VMs already cloned from it; the storage layer keeps the shared base and coalesces in the background.
 
 Automatic garbage collection is not implemented.
 

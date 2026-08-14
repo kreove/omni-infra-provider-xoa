@@ -215,7 +215,12 @@ func (p *Provisioner) importGoldenTemplate(
 	var vmID string
 	seedParams := map[string]interface{}{
 		"name_label":       cacheName,
-		"name_description": "Talos golden image managed by Sidero Omni",
+		// The name is a hash of the source URL, so it identifies the image
+		// uniquely but tells an operator nothing. Record the URL it was built
+		// from: it names the Talos version and schematic, which is what
+		// someone deciding whether a cached template is still needed actually
+		// has to know.
+		"name_description": "Talos golden image managed by Sidero Omni. Built from " + imageURL,
 		"template":         baseTemplates[0].Id,
 		"CPUs":             1,
 		"bootAfterCreate":  false,
