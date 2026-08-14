@@ -169,6 +169,25 @@ Things worth ruling out before assuming a provider bug, since none of them were 
 | Storage | The SR must not be full |
 | Image integrity | Export the template VDI and confirm it starts with an MBR signature and an `EFI PART` GPT header |
 
+## Harmless messages in a healthy boot
+
+These appear on a working machine and need no action:
+
+| Message | Why |
+| --- | --- |
+| `GPT: Alternate GPT header not at the end of the disk` | The boot disk is a clone of the golden template resized to `disk_size`, which leaves the backup GPT at the template's old end. Talos repartitions moments later and rewrites the table, so this only appears on a machine's first boot. |
+| `kvm_intel: VMX not supported` / `kvm_amd: CPU isn't AMD` | Nested virtualization is not exposed to a Xen HVM guest. |
+| `unsupported CPU family ... no PMU driver` | Xen does not pass the host PMU through. |
+| `hyperv_fb`, `hv_vmbus`, `hv_netvsc`, `hv_balloon` registering | Talos ships Hyper-V drivers; they register and stay idle on Xen. |
+| `ipmi_si: Unable to find any System Interface(s)` | No BMC in a VM. |
+| `avc: denied ... permissive=1` | Talos runs SELinux in permissive mode; these are logged, not enforced. |
+| `EventsSinkController ... no machines found for address fdae:...` | Transient, while SideroLink registration completes. |
+| `NodeApplyController ... node not found` | Transient, until the node registers with the Kubernetes API server. |
+| `etcd ... rpc not supported for learner` | Normal etcd learner promotion; followed by `successfully promoted etcd member`. |
+| `TPM device is not available` | XCP-ng guests have no vTPM, so TPM-backed disk encryption is unavailable. |
+
+A healthy boot ends with `machine is running and ready`.
+
 ## Talos boots but stays in maintenance mode and never joins Omni
 
 The dashboard shows `STAGE: Maintenance`, Omni shows the machine as "Provisioned / Waiting for the machine to join Omni", and the Talos log contains:

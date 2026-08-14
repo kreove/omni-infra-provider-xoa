@@ -46,10 +46,21 @@ The schema is defined in `internal/pkg/provider/data/schema.json` and registered
 | `template_id` | No | unset | Existing Xen Orchestra template UUID; unset enables automatic images |
 | `architecture` | Yes in schema | `amd64` | Only `amd64` is currently supported |
 | `cores` | Yes | UI default `4` | Virtual CPU core count |
-| `memory` | Yes | UI default `8192` | Memory in MiB; minimum 2048 |
+| `memory` | Yes | UI default `8192` | Memory in MiB; minimum 2048. Allow headroom — see below |
 | `disk_size` | Yes | UI default `32` | Boot disk size in GiB; minimum 5 |
 
 Fields present in the VergeOS provider that have no direct Xen Orchestra equivalent — `cpu_type`, `machine_type`, `disk_interface`, `network_interface`, `uefi`, `guest_agent` — were intentionally dropped rather than faked. See [Compatibility and limitations](compatibility.md) for why.
+
+### Sizing memory
+
+`memory` is what the VM is given, not what Talos sees. Firmware and hypervisor reservations take roughly 200 MiB off the top, so a machine configured with 4096 MiB reports about 3889 MiB inside the guest — just under the 3946 MiB Talos recommends for a control plane, which makes it log:
+
+```text
+task memorySizeCheck (1/1): NOTE: recommended memory size is 3946 MiB
+task memorySizeCheck (1/1): NOTE: current total memory size is 3889 MiB
+```
+
+The node still runs, but budget about 5% above whatever Talos recommends for the role. `4608` for a control plane clears it comfortably; the `8192` default and larger worker sizes are unaffected.
 
 ### Recommended automatic-image configuration
 
