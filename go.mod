@@ -6,6 +6,7 @@ require (
 	github.com/cosi-project/runtime v1.16.1
 	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25
 	github.com/siderolabs/omni/client v1.8.0
+	github.com/sourcegraph/jsonrpc2 v0.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/ulikunitz/xz v0.5.16
 	github.com/vatesfr/xenorchestra-go-sdk v1.18.0
@@ -85,7 +86,6 @@ require (
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/siderolabs/siderolink v0.3.16 // indirect
 	github.com/siderolabs/talos/pkg/machinery v1.13.2 // indirect
-	github.com/sourcegraph/jsonrpc2 v0.2.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
