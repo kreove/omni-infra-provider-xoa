@@ -11,7 +11,7 @@ require (
 	github.com/ulikunitz/xz v0.5.16
 	github.com/vatesfr/xenorchestra-go-sdk v1.18.0
 	go.uber.org/zap v1.28.0
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
