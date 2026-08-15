@@ -52,17 +52,29 @@ func TestLiveXOProvisioning(t *testing.T) {
 		InsecureSkipVerify: true,
 	}
 
-	iface, err := xoaclient.NewClient(cfg)
+	connect := func() (*xoaclient.Client, error) {
+		iface, cerr := xoaclient.NewClient(cfg)
+		if cerr != nil {
+			return nil, cerr
+		}
+
+		c, ok := iface.(*xoaclient.Client)
+		if !ok {
+			return nil, fmt.Errorf("unexpected client implementation type %T", iface)
+		}
+
+		return c, nil
+	}
+
+	client, err := connect()
 	if err != nil {
 		t.Fatalf("failed to connect/authenticate to Xen Orchestra: %v", err)
 	}
 
-	client, ok := iface.(*xoaclient.Client)
-	if !ok {
-		t.Fatalf("unexpected client implementation type %T", iface)
+	p, err := NewProvisioner(connect, "https://factory.talos.dev")
+	if err != nil {
+		t.Fatalf("failed to build provisioner: %v", err)
 	}
-
-	p := NewProvisioner(client, "https://factory.talos.dev")
 
 	schematic := envOrDefault("XOA_LIVE_SCHEMATIC", "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba")
 	talosVersion := envOrDefault("XOA_LIVE_TALOS_VERSION", "v1.13.8")

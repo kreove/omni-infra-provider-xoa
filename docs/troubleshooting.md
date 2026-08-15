@@ -101,6 +101,20 @@ omnictl infraprovider --help
 
 The API token is invalid, expired, or lacks permission for the attempted operation. Xen Orchestra tokens and username/password sessions inherit the permissions of their associated user; check that user's effective role/ACLs for the target pool, SR, and network.
 
+## Every operation fails with `jsonrpc2: connection is closed`
+
+Symptom: the provider was working, then every reconcile starts failing with the same error once a minute, most visibly as `failed to resolve XO pool "<uuid>": jsonrpc2: connection is closed`. Xen Orchestra itself is healthy and its UI works fine. New clusters can't be created and existing Machine Requests stop progressing.
+
+The provider talks to Xen Orchestra over a single long-lived JSON-RPC WebSocket. Anything that ends that socket — Xen Orchestra restarting or being upgraded, an idle timeout, a reverse proxy dropping the connection, a brief network blip — used to leave the client permanently broken, because the Go SDK opens the socket once and never reconnects.
+
+Since v0.1.0-alpha.5 the provider detects a dead connection, dials a new one, and retries the failed call, so this recovers on its own. If you're on an earlier version, restart the provider:
+
+```bash
+docker compose restart omni-infra-provider-xoa
+```
+
+Errors coming *from* Xen Orchestra (invalid parameters, permission denied, object not found) are deliberately not retried — only a genuinely closed transport triggers a reconnect.
+
 ## Golden-template build fails at the disk-attach or convert-to-template step
 
 The automatic image pipeline calls two Xen Orchestra JSON-RPC methods (`vm.attachDisk`, `vm.convertToTemplate`) that are not wrapped by the Go SDK. Both are confirmed working against a live pool (see [Compatibility and limitations](compatibility.md#findings-from-live-validation)), but if you're on a very different Xen Orchestra version:

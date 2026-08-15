@@ -94,23 +94,34 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("set XOA_TOKEN or both XOA_USERNAME and XOA_PASSWORD")
 		}
 
-		xoClientIface, err := xoaclient.NewClient(xoaConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create Xen Orchestra client: %w", err)
+		// Passed as a factory rather than a live client: the SDK's JSON-RPC
+		// WebSocket does not reconnect, so the provider re-dials with this
+		// whenever the connection dies. Without that, an XO restart or a
+		// dropped socket breaks the provider until it is restarted by hand.
+		connectXOA := func() (*xoaclient.Client, error) {
+			iface, cerr := xoaclient.NewClient(xoaConfig)
+			if cerr != nil {
+				return nil, fmt.Errorf("failed to connect to Xen Orchestra: %w", cerr)
+			}
+
+			// The provisioner needs the concrete client type, not just the
+			// XOClient interface, to reach the raw JSON-RPC Call escape hatch
+			// used for XO methods the SDK doesn't wrap (see image.go).
+			client, ok := iface.(*xoaclient.Client)
+			if !ok {
+				return nil, fmt.Errorf("unexpected Xen Orchestra client implementation type %T", iface)
+			}
+
+			return client, nil
 		}
 
-		// The provisioner needs the concrete client type, not just the
-		// XOClient interface, to reach the raw JSON-RPC Call escape hatch
-		// used for XO methods the SDK doesn't wrap (see image.go).
-		xoClient, ok := xoClientIface.(*xoaclient.Client)
-		if !ok {
-			return fmt.Errorf("unexpected Xen Orchestra client implementation type %T", xoClientIface)
-		}
-
-		provisioner := provider.NewProvisioner(
-			xoClient,
+		provisioner, err := provider.NewProvisioner(
+			connectXOA,
 			cfg.imageFactoryBaseURL,
 		)
+		if err != nil {
+			return err
+		}
 		infrastructureProvider, err := infra.NewProvider(
 			meta.ProviderID,
 			provisioner,

@@ -31,17 +31,24 @@ const (
 
 // Provisioner provisions Talos VMs on XCP-ng through Xen Orchestra.
 type Provisioner struct {
-	client              *xoaclient.Client
+	client              *xoClient
 	imageFactoryBaseURL string
 	imageBuilds         sync.Map
 }
 
-// NewProvisioner creates an XOA provisioner.
-func NewProvisioner(client *xoaclient.Client, imageFactoryBaseURL string) *Provisioner {
+// NewProvisioner creates an XOA provisioner. connect must open a new Xen
+// Orchestra connection each time it is called: the provider re-dials whenever
+// the JSON-RPC WebSocket dies, which otherwise breaks it until restarted.
+func NewProvisioner(connect func() (*xoaclient.Client, error), imageFactoryBaseURL string) (*Provisioner, error) {
+	client, err := newXOClient(connect)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Provisioner{
 		client:              client,
 		imageFactoryBaseURL: imageFactoryBaseURL,
-	}
+	}, nil
 }
 
 // ProvisionSteps implements infra.Provisioner.
