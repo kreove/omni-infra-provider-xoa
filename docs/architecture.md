@@ -86,7 +86,7 @@ Repeated reconciliation uses deterministic identifiers:
 | VM | Omni Machine Request ID as `name_label` |
 | Boot disk | Cloned from the resolved template as part of VM creation |
 | Primary VIF | Created on the selected network as part of VM creation |
-| Config drive | Disk named `cidata` on the VM; rebuilt only if absent |
+| Config drive | Disk named `cidata-<machine>` on the VM (`cidata` on machines created before v0.1.0-alpha.6); rebuilt only if absent |
 | Cached golden template | Deterministic `name_label` hash of the complete Image Factory asset URL |
 
 If the provider restarts after partially completing an operation, it inspects Xen Orchestra and continues from the existing resources. Unlike VergeOS, boot disk and VIF creation happen atomically as part of `vm.create`, so there is no separate "ensure disk"/"ensure NIC" reconciliation step once the VM object exists — this is a deliberate simplification enabled by Xen Orchestra's richer VM-creation API.

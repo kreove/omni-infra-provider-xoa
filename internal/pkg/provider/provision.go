@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,10 +25,37 @@ import (
 const (
 	bootDiskName = "disk0"
 
-	// configDriveName identifies the NoCloud drive this provider builds and
-	// attaches itself, so it can be recognized on reconcile.
+	// configDriveName is the name every config drive carried before they were
+	// named per machine. Still recognized -- see isConfigDrive.
 	configDriveName = "cidata"
+
+	// configDriveNamePrefix prefixes the per-machine config drive name.
+	configDriveNamePrefix = "cidata-"
 )
+
+// configDriveNameFor builds the Xen Orchestra name_label for a machine's
+// NoCloud config drive.
+//
+// This is XO metadata only. Talos matches the FAT volume label written inside
+// the image -- always "cidata", see cidata.go -- and never reads the VDI name,
+// so naming the VDI per machine is invisible to the guest. It exists because
+// every drive sharing the single name "cidata" turns the XO disk list into a
+// wall of indistinguishable 12 MiB entries with no way to tell which machine
+// owns which.
+func configDriveNameFor(vmName string) string {
+	return configDriveNamePrefix + vmName
+}
+
+// isConfigDrive reports whether a disk attached to a VM this provider manages
+// is that machine's NoCloud config drive.
+//
+// Drives created before per-machine naming are called exactly "cidata", and
+// must keep matching: if they stopped, every machine provisioned by an older
+// build would fail the existence check in ensureConfigDrive and have a second
+// config drive built, uploaded and hot-attached on the next reconcile.
+func isConfigDrive(nameLabel string) bool {
+	return nameLabel == configDriveName || strings.HasPrefix(nameLabel, configDriveNamePrefix)
+}
 
 // Provisioner provisions Talos VMs on XCP-ng through Xen Orchestra.
 type Provisioner struct {
@@ -299,7 +327,7 @@ func (p *Provisioner) ensureConfigDrive(
 	}
 
 	for _, disk := range disks {
-		if disk.NameLabel == configDriveName {
+		if isConfigDrive(disk.NameLabel) {
 			return false, nil
 		}
 	}
@@ -334,7 +362,7 @@ func (p *Provisioner) ensureConfigDrive(
 	vdi, err := p.client.CreateVDI(xoaclient.CreateVDIReq{
 		SRId:      providerData.SRID,
 		Filepath:  tmp.Name(),
-		NameLabel: configDriveName,
+		NameLabel: configDriveNameFor(vm.NameLabel),
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to upload config drive for VM %q: %w", vm.NameLabel, err)

@@ -244,7 +244,19 @@ Check the VM's console in Xen Orchestra and verify:
 - The VM can reach the Omni SideroLink and API endpoints.
 - Firewall rules allow the ports configured by your Omni deployment.
 
-The provider builds a NoCloud config drive containing the Omni Machine Join Config and attaches it as a disk named `cidata` before the VM is first powered on.
+The provider builds a NoCloud config drive containing the Omni Machine Join Config and attaches it as a disk named `cidata-<machine>` before the VM is first powered on.
+
+## Can I delete the `cidata` config drives to tidy up the disk list?
+
+No. The provider will rebuild them, and you risk breaking a machine in the meantime.
+
+`ensureConfigDrive` runs on **every** reconcile, not just at VM creation. It looks for a config drive among the VM's disks and, finding none, builds a fresh image, uploads it as a new VDI, and hot-attaches it. Deleting the drive therefore does not stick: the next reconcile — including the one triggered by any provider restart — puts it back with a new UUID.
+
+While the drive is missing, a machine that is already running and joined is unaffected, because Talos persists its machine configuration to its STATE partition and is not re-reading the drive during normal operation. The exposure is any machine that loses STATE — a reset, a re-image, a replaced system disk. The config drive is what lets it find Omni again; without one it boots into maintenance mode and stays there.
+
+They are also not leaking. `Deprovision` deletes every disk attached to the VM before deleting the VM itself, config drive included, so in steady state there is exactly one config drive per live machine. **If you count more `cidata-*` VDIs than you have machines, that is a real leak** and worth investigating rather than tidying away.
+
+Since `v0.1.0-alpha.6` the drives are named `cidata-<machine>` rather than all sharing the name `cidata`, which is what made them hard to tell apart in the Xen Orchestra disk list. Drives created by earlier versions keep the old name and are still recognized; they are not renamed in place, so a pool provisioned before the upgrade will hold a mix until those machines are replaced. To rename one by hand, change only the Xen Orchestra `name_label` — the FAT volume label *inside* the image must stay `cidata`, since that is what Talos actually probes for.
 
 ## Duplicate VM name
 
