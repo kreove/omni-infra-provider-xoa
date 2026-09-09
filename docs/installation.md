@@ -191,7 +191,6 @@ OMNI_ENDPOINT=https://omni.example.com
 OMNI_SERVICE_ACCOUNT_KEY=replace-me
 XOA_ENDPOINT=wss://xoa.example.com
 XOA_TOKEN=replace-me
-TALOS_IMAGE_FACTORY_BASE_URL=https://factory.talos.dev
 ```
 
 Start the service:
@@ -219,7 +218,7 @@ Confirm the exact environment received by the container:
 ```bash
 docker inspect omni-infra-provider-xoa \
   --format '{{range .Config.Env}}{{println .}}{{end}}' \
-  | grep -E '^(OMNI_ENDPOINT|XOA_ENDPOINT|TALOS_IMAGE_FACTORY_BASE_URL)='
+  | grep -E '^(OMNI_ENDPOINT|XOA_ENDPOINT)='
 ```
 
 The provider needs outbound connectivity to:

@@ -59,24 +59,20 @@ func isConfigDrive(nameLabel string) bool {
 
 // Provisioner provisions Talos VMs on XCP-ng through Xen Orchestra.
 type Provisioner struct {
-	client              *xoClient
-	imageFactoryBaseURL string
-	imageBuilds         sync.Map
+	client      *xoClient
+	imageBuilds sync.Map
 }
 
 // NewProvisioner creates an XOA provisioner. connect must open a new Xen
 // Orchestra connection each time it is called: the provider re-dials whenever
 // the JSON-RPC WebSocket dies, which otherwise breaks it until restarted.
-func NewProvisioner(connect func() (*xoaclient.Client, error), imageFactoryBaseURL string) (*Provisioner, error) {
+func NewProvisioner(connect func() (*xoaclient.Client, error)) (*Provisioner, error) {
 	client, err := newXOClient(connect)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Provisioner{
-		client:              client,
-		imageFactoryBaseURL: imageFactoryBaseURL,
-	}, nil
+	return &Provisioner{client: client}, nil
 }
 
 // ProvisionSteps implements infra.Provisioner.
@@ -95,29 +91,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			applyDefaults(&providerData)
 
 			return validateProviderData(providerData)
-		}),
-		provision.NewStep("createSchematic", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			// Keep the serial console for hosts that provide one, but make tty0
-			// the last console= so it owns /dev/console. XCP-ng HVM guests do
-			// not get a serial port unless one is configured, and the VergeOS
-			// provider this was ported from enabled one explicitly. Without
-			// tty0 every message after early boot -- including kernel panics --
-			// is written to a device that does not exist, leaving the XO
-			// console blank and the failure invisible.
-			schematic, err := pctx.GenerateSchematicID(
-				ctx,
-				logger,
-				provision.WithExtraKernelArgs("console=ttyS0,38400n8", "console=tty0"),
-				provision.WithoutConnectionParams(),
-			)
-			if err != nil {
-				return err
-			}
-
-			pctx.State.TypedSpec().Value.Schematic = schematic
-			pctx.State.TypedSpec().Value.TalosVersion = pctx.GetTalosVersion()
-
-			return nil
 		}),
 		provision.NewStep("ensureTarget", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			var providerData data.Data
@@ -141,6 +114,11 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			return nil
 		}),
+		// Resolving the installation medium also ensures the schematic exists
+		// and reports its ID, so there is no separate schematic step. Keeping
+		// one would mean asking Omni for the same medium twice per reconcile,
+		// and the download URL it returns is short-lived -- it belongs in the
+		// step that actually fetches it, not in an earlier one.
 		provision.NewStep("ensureImage", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			var providerData data.Data
 			if err := pctx.UnmarshalProviderData(&providerData); err != nil {

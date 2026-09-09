@@ -36,9 +36,6 @@ spec:
         - name: provider
           image: ghcr.io/kreove/omni-infra-provider-xoa:VERSION
           imagePullPolicy: IfNotPresent
-          env:
-            - name: TALOS_IMAGE_FACTORY_BASE_URL
-              value: https://factory.talos.dev
           envFrom:
             - secretRef:
                 name: provider-credentials

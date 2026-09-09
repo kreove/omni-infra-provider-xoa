@@ -33,7 +33,11 @@ import (
 // Optional: XOA_LIVE_SCHEMATIC, XOA_LIVE_TALOS_VERSION (defaults to a known
 // good no-extensions schematic and a recent Talos release) and
 // XOA_LIVE_KEEP_TEMPLATE=1 to skip deleting the built golden template
-// afterward so it can be reused by a real Machine Request.
+// afterward so it can be inspected by hand.
+//
+// A kept template is no longer reusable by a real Machine Request: the cache
+// name now comes from the storage key Omni reports for the medium, and this
+// test builds its own name because it runs without Omni.
 func TestLiveXOProvisioning(t *testing.T) {
 	endpoint := os.Getenv("XOA_LIVE_ENDPOINT")
 	if endpoint == "" {
@@ -71,7 +75,7 @@ func TestLiveXOProvisioning(t *testing.T) {
 		t.Fatalf("failed to connect/authenticate to Xen Orchestra: %v", err)
 	}
 
-	p, err := NewProvisioner(connect, "https://factory.talos.dev")
+	p, err := NewProvisioner(connect)
 	if err != nil {
 		t.Fatalf("failed to build provisioner: %v", err)
 	}
@@ -79,12 +83,26 @@ func TestLiveXOProvisioning(t *testing.T) {
 	schematic := envOrDefault("XOA_LIVE_SCHEMATIC", "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba")
 	talosVersion := envOrDefault("XOA_LIVE_TALOS_VERSION", "v1.13.8")
 
-	imageURL, cacheName, err := buildTalosImageReference(p.imageFactoryBaseURL, schematic, talosVersion, "amd64")
-	if err != nil {
-		t.Fatalf("buildTalosImageReference failed: %v", err)
+	// This test deliberately runs without Omni, so it cannot resolve an
+	// installation medium the way the provider does. It builds the public
+	// factory URL itself instead, which is fine for an anonymous factory: the
+	// URL carries no credentials and needs no headers.
+	imageURL := fmt.Sprintf(
+		"https://factory.talos.dev/image/%s/%s/nocloud-amd64.%s",
+		schematic, talosVersion, talosDiskFormat,
+	)
+
+	source := imageSource{
+		url:          imageURL,
+		schematicID:  schematic,
+		talosVersion: talosVersion,
 	}
 
-	t.Logf("building golden template from %s (cache name %s)", imageURL, cacheName)
+	// Not the name a real Machine Request would use -- that comes from the
+	// storage key Omni reports for the medium, which is not derivable here.
+	cacheName := fmt.Sprintf("%slive-%s-%s", imageCachePrefix, talosVersion, schematic[:12])
+
+	t.Logf("building golden template %s from Talos %s", cacheName, talosVersion)
 
 	providerData := data.Data{
 		PoolID:       poolID,
@@ -99,7 +117,7 @@ func TestLiveXOProvisioning(t *testing.T) {
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer buildCancel()
 
-	templateID, err := p.importGoldenTemplate(buildCtx, providerData, imageURL, cacheName)
+	templateID, err := p.importGoldenTemplate(buildCtx, providerData, source, cacheName)
 	if err != nil {
 		t.Fatalf("importGoldenTemplate failed: %v", err)
 	}

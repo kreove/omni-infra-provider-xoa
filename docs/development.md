@@ -36,7 +36,7 @@ docker run --rm omni-infra-provider-xoa:dev --help
 ```text
 cmd/omni-infra-provider-xoa/        process startup and flags
 internal/pkg/provider/provision.go  machine lifecycle reconciliation
-internal/pkg/provider/image.go      Image Factory URL and golden-template handling
+internal/pkg/provider/image.go      installation media resolution and golden-template handling
 internal/pkg/provider/data/         Machine Class data and JSON schema
 internal/pkg/provider/resources/    Omni/COSI provider state resource
 api/specs/                          generated protobuf machine state
@@ -124,7 +124,7 @@ Never yet exercised — do these before calling the provider beta:
 3. Invalid pool ID failure
 4. Invalid network ID failure
 5. Xen Orchestra permission failure, and running as a non-admin account
-6. Failed Image Factory URL/import behavior
+6. Failed image resolution/import behavior
 7. System extension change (same mechanism as a version change, but it *does* build a new
    template, because the schematic changes before any machine exists)
 8. Manual `template_id` override against a hand-built template

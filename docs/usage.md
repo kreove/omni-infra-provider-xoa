@@ -102,7 +102,7 @@ When Omni releases a dynamically provisioned machine, the provider:
 
 ## Change Talos versions
 
-Upgrade Talos through Omni. The new Talos version produces a different Image Factory URL and cache name. The provider builds the new template once, after which machines can reuse it during the rollout.
+Upgrade Talos through Omni. The new Talos version produces a different installation medium and therefore a different cache name. The provider builds the new template once, after which machines can reuse it during the rollout.
 
 Official upgrade guide:
 
