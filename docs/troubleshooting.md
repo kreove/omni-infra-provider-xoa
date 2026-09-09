@@ -30,22 +30,6 @@ docker inspect omni-infra-provider-xoa \
   | grep XOA_ENDPOINT
 ```
 
-## Invalid Image Factory URL containing `$(`
-
-Docker Compose uses `${VAR}` syntax, not `$(VAR)`.
-
-Use:
-
-```yaml
-TALOS_IMAGE_FACTORY_BASE_URL: ${TALOS_IMAGE_FACTORY_BASE_URL:-https://factory.talos.dev}
-```
-
-Then recreate the container:
-
-```bash
-docker compose up -d --force-recreate omni-infra-provider-xoa
-```
-
 ## `failed to decode service account key from options: illegal base64 data at input byte N`
 
 The container starts, logs its startup line, then exits and restarts in a loop. The service account key is present but not valid base64.

@@ -15,7 +15,6 @@ The provider accepts environment variables and equivalent command-line flags. Co
 | `XOA_TOKEN` | `--xoa-token` | One auth method | none | Preferred Xen Orchestra authentication method |
 | `XOA_USERNAME` | `--xoa-username` | One auth method | none | Username when token auth is not used |
 | `XOA_PASSWORD` | `--xoa-password` | One auth method | none | Password when token auth is not used |
-| `TALOS_IMAGE_FACTORY_BASE_URL` | `--image-factory-base-url` | No | `https://factory.talos.dev` | Public or private Image Factory base URL |
 | n/a | `--xoa-insecure-skip-verify` | No | `false` | Skip Xen Orchestra TLS verification |
 | n/a | `--insecure-skip-verify` | No | `false` | Skip Omni TLS verification |
 
@@ -33,6 +32,9 @@ The provider uses Xen Orchestra credentials in this order:
 2. `XOA_USERNAME` and `XOA_PASSWORD`
 
 If a token is set, username/password values are ignored.
+
+> [!NOTE]
+> The provider no longer has an Image Factory setting. Omni resolves the installation medium and hands the provider a URL, so the factory — including a self-hosted or authenticated one — is configured in Omni, not here. `TALOS_IMAGE_FACTORY_BASE_URL` and `--image-factory-base-url` were removed; leaving them set has no effect.
 
 ## Machine Class provider data
 

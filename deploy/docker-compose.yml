@@ -9,7 +9,6 @@ services:
       OMNI_SERVICE_ACCOUNT_KEY: ${OMNI_SERVICE_ACCOUNT_KEY:?OMNI_SERVICE_ACCOUNT_KEY is not set}
       XOA_ENDPOINT: ${XOA_ENDPOINT:?XOA_ENDPOINT is not set}
       XOA_TOKEN: ${XOA_TOKEN:?XOA_TOKEN is not set}
-      TALOS_IMAGE_FACTORY_BASE_URL: ${TALOS_IMAGE_FACTORY_BASE_URL:-https://factory.talos.dev}
 
     # For a temporary test with an untrusted Xen Orchestra or Omni certificate, add:
     # command:

@@ -46,7 +46,6 @@ var cfg struct {
 	xoaUsername            string
 	xoaPassword            string
 	xoaInsecure            bool
-	imageFactoryBaseURL    string
 	omniInsecureSkipVerify bool
 }
 
@@ -115,10 +114,7 @@ var rootCmd = &cobra.Command{
 			return client, nil
 		}
 
-		provisioner, err := provider.NewProvisioner(
-			connectXOA,
-			cfg.imageFactoryBaseURL,
-		)
+		provisioner, err := provider.NewProvisioner(connectXOA)
 		if err != nil {
 			return err
 		}
@@ -148,7 +144,6 @@ var rootCmd = &cobra.Command{
 			zap.String("version", version),
 			zap.String("provider_id", meta.ProviderID),
 			zap.String("xoa_endpoint", cfg.xoaEndpoint),
-			zap.String("image_factory_base_url", cfg.imageFactoryBaseURL),
 		)
 
 		return infrastructureProvider.Run(
@@ -192,7 +187,6 @@ func normalizeConfig() {
 	cfg.xoaEndpoint = strings.TrimSpace(cfg.xoaEndpoint)
 	cfg.xoaToken = strings.TrimSpace(cfg.xoaToken)
 	cfg.xoaUsername = strings.TrimSpace(cfg.xoaUsername)
-	cfg.imageFactoryBaseURL = strings.TrimSpace(cfg.imageFactoryBaseURL)
 }
 
 func stripWhitespace(value string) string {
@@ -315,12 +309,6 @@ func init() {
 		"xoa-endpoint",
 		firstNonEmpty(os.Getenv("XOA_ENDPOINT"), os.Getenv("XOA_HOST")),
 		"Xen Orchestra base URL, e.g. wss://xoa.example.com (defaults to XOA_ENDPOINT, then XOA_HOST)",
-	)
-	rootCmd.Flags().StringVar(
-		&cfg.imageFactoryBaseURL,
-		"image-factory-base-url",
-		firstNonEmpty(os.Getenv("TALOS_IMAGE_FACTORY_BASE_URL"), "https://factory.talos.dev"),
-		"Talos Image Factory base URL",
 	)
 	rootCmd.Flags().StringVar(
 		&cfg.xoaToken,

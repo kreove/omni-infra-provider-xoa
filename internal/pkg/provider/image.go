@@ -6,18 +6,14 @@ package provider
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/siderolabs/omni/client/pkg/imagefactory"
 	"github.com/siderolabs/omni/client/pkg/infra/provision"
 	"github.com/ulikunitz/xz"
 	xoaclient "github.com/vatesfr/xenorchestra-go-sdk/client"
@@ -43,6 +39,16 @@ const (
 	// template on every pool.
 	baseSeedTemplateName = "Other install media"
 
+	// talosPlatform is the Talos platform this provider provisions. NoCloud is
+	// what makes the guest read its machine config from the config drive the
+	// provider attaches.
+	talosPlatform = "nocloud"
+
+	// talosDiskFormat is the disk image the factory publishes for XCP-ng use.
+	// It arrives xz-compressed and is decompressed before upload, because XO
+	// imports a raw VDI.
+	talosDiskFormat = "raw.xz"
+
 	imageBuildTimeout = 45 * time.Minute
 )
 
@@ -57,6 +63,17 @@ type imageBuild struct {
 	done       bool
 	templateID string
 	err        error
+}
+
+// imageSource is everything a detached golden-template build needs.
+//
+// It is copied out of the provision context on purpose. The context belongs to
+// the step that created it, and the build outlives that step.
+type imageSource struct {
+	url          string
+	headers      http.Header
+	schematicID  string
+	talosVersion string
 }
 
 // ensureTalosImage resolves a manually supplied XO template or builds and
@@ -81,24 +98,74 @@ func (p *Provisioner) ensureTalosImage(
 		return templates[0].Id, true, nil
 	}
 
-	imageURL, cacheName, err := buildTalosImageReference(
-		p.imageFactoryBaseURL,
-		pctx.State.TypedSpec().Value.Schematic,
-		pctx.GetTalosVersion(),
-		providerData.Architecture,
+	// Omni owns the schematic upload and knows how its image factory spells a
+	// medium, so the provider asks for one by description rather than building
+	// a factory URL itself. This also keeps working against a factory that
+	// authenticates downloads, which a hand-built URL would not.
+	media, err := pctx.EnsureInstallationMedia(
+		ctx,
+		logger,
+		mediaSpecFor(providerData),
+		// Keep the serial console for hosts that provide one, but make tty0
+		// the last console= so it owns /dev/console. XCP-ng HVM guests do
+		// not get a serial port unless one is configured, and the VergeOS
+		// provider this was ported from enabled one explicitly. Without
+		// tty0 every message after early boot -- including kernel panics --
+		// is written to a device that does not exist, leaving the XO
+		// console blank and the failure invisible.
+		provision.WithExtraKernelArgs("console=ttyS0,38400n8", "console=tty0"),
+		provision.WithoutConnectionParams(),
 	)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("failed to resolve Talos installation media: %w", err)
 	}
 
-	return p.ensureGoldenTemplate(ctx, logger, providerData, imageURL, cacheName)
+	pctx.State.TypedSpec().Value.Schematic = media.SchematicID
+	pctx.State.TypedSpec().Value.TalosVersion = pctx.GetTalosVersion()
+
+	source := imageSource{
+		url:          media.URL,
+		headers:      media.Headers,
+		schematicID:  media.SchematicID,
+		talosVersion: pctx.GetTalosVersion(),
+	}
+
+	return p.ensureGoldenTemplate(ctx, logger, providerData, source, cacheNameFor(media))
+}
+
+// mediaSpecFor describes the installation medium a Machine Class asks for.
+func mediaSpecFor(providerData data.Data) provision.MediaSpec {
+	return provision.MediaSpec{
+		MediaSpec: imagefactory.MediaSpec{
+			Kind:         imagefactory.InstallationMediaKindDisk,
+			Platform:     talosPlatform,
+			Architecture: providerData.Architecture,
+			Format:       talosDiskFormat,
+		},
+		// The URL has to outlast the download, which runs detached from the
+		// step that requested it. Omni's default assumes the fetch happens
+		// immediately, which is not true here.
+		DownloadTokenTTL: imageBuildTimeout,
+	}
+}
+
+// cacheNameFor derives the XO template name for a medium.
+//
+// StorageKey exists for exactly this: it identifies the medium and changes only
+// when the medium does. The URL must not be used instead -- it can carry
+// credentials or a download token, so a name derived from it would change
+// whenever those rotate and orphan the template already built under the old
+// name.
+func cacheNameFor(media imagefactory.InstallationMedia) string {
+	return imageCachePrefix + media.StorageKey
 }
 
 func (p *Provisioner) ensureGoldenTemplate(
 	ctx context.Context,
 	logger *zap.Logger,
 	providerData data.Data,
-	imageURL, cacheName string,
+	source imageSource,
+	cacheName string,
 ) (string, bool, error) {
 	buildAny, loaded := p.imageBuilds.LoadOrStore(cacheName, &imageBuild{})
 
@@ -125,13 +192,16 @@ func (p *Provisioner) ensureGoldenTemplate(
 
 			return "", false, fmt.Errorf("failed to inspect XO template cache: %w", err)
 		default:
+			// The media URL is deliberately absent from this line: it can
+			// carry credentials or a download token.
 			logger.Info(
 				"starting Talos image import",
 				zap.String("name", cacheName),
-				zap.String("url", imageURL),
+				zap.String("schematic", source.schematicID),
+				zap.String("talos_version", source.talosVersion),
 			)
 
-			go p.buildGoldenTemplate(providerData, imageURL, cacheName, build)
+			go p.buildGoldenTemplate(providerData, source, cacheName, build)
 		}
 	}
 
@@ -162,11 +232,11 @@ func (p *Provisioner) ensureGoldenTemplate(
 // The VDI-attach and convert-to-template calls are not wrapped by the XO Go
 // SDK, so they go through the client's raw Call escape hatch (vm.attachDisk,
 // vm.convertToTemplate). Both were confirmed against a live XO instance.
-func (p *Provisioner) buildGoldenTemplate(providerData data.Data, imageURL, cacheName string, build *imageBuild) {
+func (p *Provisioner) buildGoldenTemplate(providerData data.Data, source imageSource, cacheName string, build *imageBuild) {
 	ctx, cancel := context.WithTimeout(context.Background(), imageBuildTimeout)
 	defer cancel()
 
-	templateID, err := p.importGoldenTemplate(ctx, providerData, imageURL, cacheName)
+	templateID, err := p.importGoldenTemplate(ctx, providerData, source, cacheName)
 
 	build.mu.Lock()
 	defer build.mu.Unlock()
@@ -184,11 +254,12 @@ func (p *Provisioner) buildGoldenTemplate(providerData data.Data, imageURL, cach
 func (p *Provisioner) importGoldenTemplate(
 	ctx context.Context,
 	providerData data.Data,
-	imageURL, cacheName string,
+	source imageSource,
+	cacheName string,
 ) (string, error) {
-	rawPath, err := downloadAndDecompress(ctx, imageURL)
+	rawPath, err := downloadAndDecompress(ctx, source)
 	if err != nil {
-		return "", fmt.Errorf("failed to download Talos image from %q: %w", imageURL, err)
+		return "", fmt.Errorf("failed to download Talos image: %w", err)
 	}
 	defer os.Remove(rawPath)
 
@@ -215,12 +286,12 @@ func (p *Provisioner) importGoldenTemplate(
 	var vmID string
 	seedParams := map[string]interface{}{
 		"name_label": cacheName,
-		// The name is a hash of the source URL, so it identifies the image
-		// uniquely but tells an operator nothing. Record the URL it was built
-		// from: it names the Talos version and schematic, which is what
-		// someone deciding whether a cached template is still needed actually
-		// has to know.
-		"name_description": "Talos golden image managed by Sidero Omni. Built from " + imageURL,
+		// The name is a digest, so it identifies the image uniquely but tells
+		// an operator nothing. Record what the image actually is: the Talos
+		// version and schematic are what someone deciding whether a cached
+		// template is still needed has to know. The source URL is deliberately
+		// not recorded -- it can carry credentials.
+		"name_description": describeTemplate(source, providerData),
 		"template":         baseTemplates[0].Id,
 		"CPUs":             1,
 		"bootAfterCreate":  false,
@@ -253,12 +324,33 @@ func (p *Provisioner) importGoldenTemplate(
 	return vmID, nil
 }
 
-// downloadAndDecompress streams imageURL (a .raw.xz Talos NoCloud image) to a
-// scratch file, decompressing as it goes, and returns the scratch file path.
-func downloadAndDecompress(ctx context.Context, imageURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+// describeTemplate renders the description stored on a cached golden template.
+func describeTemplate(source imageSource, providerData data.Data) string {
+	return fmt.Sprintf(
+		"Talos %s %s, schematic %s, golden image managed by Sidero Omni",
+		source.talosVersion,
+		providerData.Architecture,
+		source.schematicID,
+	)
+}
+
+// downloadAndDecompress streams the installation medium (a .raw.xz Talos
+// NoCloud image) to a scratch file, decompressing as it goes, and returns the
+// scratch file path.
+func downloadAndDecompress(ctx context.Context, source imageSource) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.url, nil)
 	if err != nil {
 		return "", err
+	}
+
+	// A factory that authenticates downloads returns them here. They are sent
+	// whenever present rather than decided from configuration, because the
+	// same factory may authenticate by header or inside the URL depending on
+	// how Omni is set up.
+	for key, values := range source.headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -268,7 +360,8 @@ func downloadAndDecompress(ctx context.Context, imageURL string) (string, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+		// The URL is not included: it can carry a download token.
+		return "", fmt.Errorf("unexpected HTTP status %d from the image factory", resp.StatusCode)
 	}
 
 	xzReader, err := xz.NewReader(resp.Body)
@@ -289,55 +382,6 @@ func downloadAndDecompress(ctx context.Context, imageURL string) (string, error)
 	}
 
 	return out.Name(), nil
-}
-
-func buildTalosImageReference(
-	baseURL,
-	schematic,
-	talosVersion,
-	architecture string,
-) (imageURL, cacheName string, err error) {
-	if strings.TrimSpace(schematic) == "" {
-		return "", "", fmt.Errorf("cannot build Talos image URL without a schematic ID")
-	}
-
-	if strings.TrimSpace(talosVersion) == "" {
-		return "", "", fmt.Errorf("cannot build Talos image URL without a Talos version")
-	}
-
-	if strings.TrimSpace(architecture) == "" {
-		return "", "", fmt.Errorf("cannot build Talos image URL without an architecture")
-	}
-
-	base, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return "", "", fmt.Errorf("invalid Image Factory URL %q: %w", baseURL, err)
-	}
-
-	if base.Scheme != "https" && base.Scheme != "http" {
-		return "", "", fmt.Errorf("Image Factory URL must use HTTP or HTTPS")
-	}
-
-	if base.Host == "" {
-		return "", "", fmt.Errorf("Image Factory URL %q has no host", baseURL)
-	}
-
-	base.Path = path.Join(
-		base.Path,
-		"image",
-		schematic,
-		talosVersion,
-		fmt.Sprintf("nocloud-%s.raw.xz", architecture),
-	)
-	base.RawPath = ""
-	base.RawQuery = ""
-	base.Fragment = ""
-
-	imageURL = base.String()
-	hash := sha256.Sum256([]byte(imageURL))
-	cacheName = imageCachePrefix + hex.EncodeToString(hash[:12])
-
-	return imageURL, cacheName, nil
 }
 
 func isNotFoundErr(err error) bool {

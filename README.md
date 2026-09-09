@@ -91,7 +91,6 @@ OMNI_ENDPOINT=https://omni.example.com
 OMNI_SERVICE_ACCOUNT_KEY=replace-me
 XOA_ENDPOINT=wss://xoa.example.com
 XOA_TOKEN=replace-me
-TALOS_IMAGE_FACTORY_BASE_URL=https://factory.talos.dev
 ```
 
 ### 4. Start the provider

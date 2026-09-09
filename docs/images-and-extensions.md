@@ -75,15 +75,9 @@ Manual mode is useful for testing, disconnected environments, or emergency rollb
 
 ## Self-hosted Image Factory
 
-Set:
+Configure it **in Omni**. The provider has no Image Factory setting of its own: it asks Omni for the installation medium it wants and Omni returns a URL, along with any headers needed to fetch it. A self-hosted or authenticated factory is therefore a matter of how Omni is set up, and the provider follows automatically.
 
-```dotenv
-TALOS_IMAGE_FACTORY_BASE_URL=https://factory.example.com
-```
-
-The provider appends `/image/<schematic>/<version>/nocloud-<architecture>.raw.xz` to this base URL.
-
-The provider container must trust the factory's TLS certificate and be able to resolve and reach the hostname. The current provider has no separate Image Factory authentication settings. Private factories that require custom request headers or tokens are not supported by this release.
+The provider container must still trust the factory's TLS certificate and be able to resolve and reach the hostname, since it performs the download itself. Authentication that Omni expresses as request headers or as a token inside the URL is now handled: the provider sends whatever headers Omni returns.
 
 Official self-hosted Image Factory guide:
 
@@ -95,12 +89,13 @@ The provider intentionally does not delete cached golden templates during VM dep
 
 For now, clean unused templates manually.
 
-**Identifying a template.** The name is a hash, so it says nothing on its own. Each template's *description* records the Image Factory URL it was built from, which names the Talos version and schematic:
+**Identifying a template.** The name is a digest, so it says nothing on its own. Each template's *description* records the Talos version, architecture and schematic:
 
 ```text
-Talos golden image managed by Sidero Omni. Built from
-https://factory.talos.dev/image/<schematic>/<version>/nocloud-amd64.raw.xz
+Talos v1.12.4 amd64, schematic <schematic>, golden image managed by Sidero Omni
 ```
+
+The download URL is deliberately not recorded, because it can carry credentials.
 
 > [!WARNING]
 > A template records the version a machine was **created** at, which is not necessarily the version it **runs**. Talos upgrades are applied in place — Omni writes the new version to the machine's alternate boot partition over SideroLink, and the infrastructure provider is not involved — so after an upgrade a machine still descends from the template it was originally cloned from while running something newer. Comparing a template's version against a running cluster is therefore not a reliable way to spot a stale template.
