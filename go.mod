@@ -6,10 +6,10 @@ require (
 	github.com/cosi-project/runtime v1.16.3
 	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df
 	github.com/siderolabs/omni/client v1.11.0
-	github.com/sourcegraph/jsonrpc2 v0.2.1
+	github.com/sourcegraph/jsonrpc2 v0.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/ulikunitz/xz v0.5.16
-	github.com/vatesfr/xenorchestra-go-sdk v1.18.0
+	github.com/vatesfr/xenorchestra-go-sdk v1.19.0
 	go.uber.org/zap v1.28.0
 	google.golang.org/protobuf v1.36.12
 )
