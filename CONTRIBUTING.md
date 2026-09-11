@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are welcome, especially live testing across different Omni, Xen Orchestra, and XCP-ng releases — in particular validating the golden-template build sequence described in [Compatibility and limitations](docs/compatibility.md#golden-template-build-needs-live-validation).
+Contributions are welcome, especially live testing across different Omni, Xen Orchestra, and XCP-ng releases. The full machine lifecycle has been validated, but on a single environment; see [Compatibility and limitations](docs/compatibility.md#release-status) for what that covered and [Findings from live validation](docs/compatibility.md#findings-from-live-validation) for what it uncovered.
 
 ## Before opening a pull request
 

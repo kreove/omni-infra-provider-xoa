@@ -27,6 +27,11 @@ This provider is a community alpha, ported from [omni-infra-provider-vergeos](ht
 
 All of this was validated on a single environment: XCP-ng 8.3 on Ivy Bridge hosts, Xen Orchestra, Talos 1.13.x, `amd64`. See [Findings from live validation](#findings-from-live-validation) for the incompatibilities that testing uncovered. It has not been certified by Sidero Labs or Vates.
 
+> [!NOTE]
+> The two image rows above were exercised **before** the provider moved to Omni's installation media API. That change altered how the image is located, how its cache entry is named, and how the download is authenticated, and has not been re-validated against a live pool. Everything else in the table is unaffected — it does not touch VM creation, boot, join or deprovisioning.
+>
+> One practical consequence of the rename: cached templates built by an earlier release are named from a hash of the image URL, and the provider now names them from the medium's storage key. It will not find the old ones, so the first machine after upgrading rebuilds its template. The stale templates are harmless but can be deleted once nothing clones from them.
+
 ## Build-time dependencies
 
 The current source tree declares:
